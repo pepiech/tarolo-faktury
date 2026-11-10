@@ -17,6 +17,33 @@ Tento adresář je provozní dokumentace a zdrojový kód první testovací apli
 
 Stav ověřen 10. 11. 2026: `helloapp` i PostgreSQL jsou aktivní, health check je v pořádku, databáze používá UTF-8 a webový port není otevřený v UFW.
 
+## Git repozitář
+
+- Soukromý repozitář: `https://github.com/pepiech/tarolo-faktury`
+- Hlavní větev: `main`
+- Lokální pracovní kopie: `D:\projekty\tarolo-miniPC-webserver-102`
+- Read-only deployment checkout v LXC: `/srv/repos/tarolo-faktury`
+- Windows používá repo-specifický deploy klíč s právem zápisu, otisk `SHA256:dk7IjmWa84DheaM8nnGSm611p6euzzsfNKD7L/FUrD0`
+- LXC používá samostatný deploy klíč pouze pro čtení, otisk `SHA256:NJ6ShNVWcpo9+CXcdUHjfSbjjMo5p+zT7l7gsNToWEU`
+
+Windows používá SSH alias `github-tarolo-faktury`, takže `origin` má adresu `git@github-tarolo-faktury:pepiech/tarolo-faktury.git`. Běžná práce:
+
+```powershell
+Set-Location D:\projekty\tarolo-miniPC-webserver-102
+git status
+git add --all
+git commit -m "Popis změny"
+git push
+```
+
+Na LXC se změny pouze stahují:
+
+```bash
+git -C /srv/repos/tarolo-faktury pull --ff-only
+```
+
+Živý proces zatím běží z `/srv/apps/hello/src`; checkout v `/srv/repos` jej automaticky nepřepisuje. Budoucí deployment bude explicitní: záloha, fast-forward pull, instalace závislostí, migrace, static files, kontrola a restart služby. Soukromé klíče ani `/etc/helloapp.env` nejsou v repozitáři.
+
 ## Práce s LXC z Proxmox hostitele
 
 Po přihlášení jako `root` na Proxmox (`192.168.0.200`) jsou užitečné tyto příkazy:
@@ -112,7 +139,7 @@ Poznámka: `systemd-journald` v tomto neprivilegovaném LXC aktuálně selhává
 
 Má se vytvořit samostatný vzdáleně spravovaný Cloudflare Tunnel `miniPC-webserver-102`. Veřejný hostname `faktury.vagasutca.org` bude směrovat na `http://localhost:8101`. Tunel je odchozí spojení, takže nevyžaduje veřejnou IP, port forwarding ani ruční aktualizaci měnící se IP.
 
-Access aplikace `Faktury` chrání přesný hostname. Anonymní test 10. 11. 2026 vrátil `302` na přihlašovací stránku `frosty-sound-32ef.cloudflareaccess.com`; přihlášený uživatel byl přesměrován do Django aplikace. Tunelový token je uložen pouze v `/etc/cloudflared/token` a nesmí se vkládat do tohoto souboru, Gitu ani do chatu.
+Access aplikace `Faktury` chrání přesný hostname. Anonymní test 10. 11. 2026 vrátil `302` na přihlašovací stránku `frosty-sound-32ef.cloudflareaccess.com`; přihlášený uživatel byl přesměrován do Django aplikace. Přihlášení podporuje Cloudflare účet a One-time PIN; Allow politika obsahuje pouze schválené e-mailové adresy. Tunelový token je uložen pouze v `/etc/cloudflared/token` a nesmí se vkládat do tohoto souboru, Gitu ani do chatu.
 
 Autorizační token nebo přihlašovací URL se nemají vkládat do dokumentace ani do chatu. Přihlášení provede majitel účtu Cloudflare. Pro administrativní nebo testovací aplikaci je vhodné před hostname zapnout Cloudflare Access.
 
