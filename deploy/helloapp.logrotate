@@ -1,0 +1,10 @@
+/var/log/helloapp/application.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su helloapp helloapp
+}

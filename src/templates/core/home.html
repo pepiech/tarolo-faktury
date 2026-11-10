@@ -1,0 +1,58 @@
+{% load static %}
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Kontrolní stránka miniPC webhostingu v LXC 102.">
+  <title>MiniPC webhosting · LXC 102</title>
+  <link rel="stylesheet" href="{% static 'core/site.css' %}">
+</head>
+<body>
+  <a class="skip-link" href="#obsah">Přeskočit na obsah</a>
+  <main id="obsah" class="sheet">
+    <aside class="identity" aria-label="Identifikace serveru">
+      <span class="eyebrow">TÁROLÓ / PROVOZ</span>
+      <strong>WEB<br>102</strong>
+      <span>192.168.0.203</span>
+    </aside>
+
+    <section class="content">
+      <header>
+        <p class="kicker">Předávací protokol · {% now "Y" %}</p>
+        <h1>MiniPC webhosting<br><em>je připravený.</em></h1>
+        <p class="lede">První Django aplikace běží odděleně v kontejneru a data ukládá do lokálního PostgreSQL.</p>
+      </header>
+
+      <div class="rule" aria-hidden="true"></div>
+
+      <section class="diagnostics" aria-labelledby="diag-title">
+        <h2 id="diag-title">Kontrola systému</h2>
+        <dl>
+          <div>
+            <dt>Aplikace</dt>
+            <dd><span class="signal ok"></span>Django {{ django_version }} LTS</dd>
+          </div>
+          <div>
+            <dt>Databáze</dt>
+            <dd><span class="signal {% if database_ok %}ok{% else %}bad{% endif %}"></span>PostgreSQL {{ postgres_version }}</dd>
+          </div>
+          <div>
+            <dt>Proces</dt>
+            <dd><span class="signal ok"></span>Gunicorn / systemd</dd>
+          </div>
+          <div>
+            <dt>Rozhraní</dt>
+            <dd><span class="signal private"></span>pouze 127.0.0.1:8101</dd>
+          </div>
+        </dl>
+      </section>
+
+      <footer>
+        <p><span>Další krok</span>Připojit soukromý Cloudflare Tunnel a zvolit hostname.</p>
+        <a href="/health/">Otevřít strojovou kontrolu <span aria-hidden="true">→</span></a>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>
