@@ -141,6 +141,10 @@ Má se vytvořit samostatný vzdáleně spravovaný Cloudflare Tunnel `miniPC-we
 
 Access aplikace `Faktury` chrání přesný hostname. Anonymní test 10. 11. 2026 vrátil `302` na přihlašovací stránku `frosty-sound-32ef.cloudflareaccess.com`; přihlášený uživatel byl přesměrován do Django aplikace. Přihlášení podporuje Cloudflare účet a One-time PIN; Allow politika obsahuje pouze schválené e-mailové adresy. Tunelový token je uložen pouze v `/etc/cloudflared/token` a nesmí se vkládat do tohoto souboru, Gitu ani do chatu.
 
+Cloudflare předává ověřenou identitu v Access JWT a hlavičce `Cf-Access-Authenticated-User-Email`. Úvodní stránka validní e-mail zobrazí. Hlavičce je dovoleno věřit pouze proto, že Gunicorn poslouchá jen na `127.0.0.1` a tunel má zapnuté `Protect with Access` / validaci Access JWT; při jiné architektuře musí aplikace JWT sama ověřovat proti team domain a AUD tagu.
+
+Úvodní stránka používá firemní logo F13 stažené 10. 11. 2026 z veřejného webu `https://www.f13cybertech.cz/`; lokální kopie je v `src/static/core/f13-logo.svg`, takže aplikace při načtení nekontaktuje Builder.io.
+
 Autorizační token nebo přihlašovací URL se nemají vkládat do dokumentace ani do chatu. Přihlášení provede majitel účtu Cloudflare. Pro administrativní nebo testovací aplikaci je vhodné před hostname zapnout Cloudflare Access.
 
 Při volbě hostname je nutné přidat jej také do řádku `DJANGO_ALLOWED_HOSTS` v `/etc/helloapp.env` a restartovat `helloapp`. Pro reálnou aplikaci doplnit hostname rovněž do `CSRF_TRUSTED_ORIGINS` v nastavení Django.

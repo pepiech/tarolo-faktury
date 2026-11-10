@@ -1,4 +1,6 @@
 from django import get_version
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import connection
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -18,6 +20,14 @@ def home(request):
         postgres_version = "nedostupné"
         database_ok = False
 
+    access_email = (
+        request.headers.get("Cf-Access-Authenticated-User-Email", "").strip().lower()
+    )
+    try:
+        validate_email(access_email)
+    except ValidationError:
+        access_email = ""
+
     return render(
         request,
         "core/home.html",
@@ -25,6 +35,7 @@ def home(request):
             "database_ok": database_ok,
             "django_version": ".".join(get_version().split(".")[:2]),
             "postgres_version": postgres_version,
+            "access_email": access_email,
         },
         status=200 if database_ok else 503,
     )
