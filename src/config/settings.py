@@ -79,6 +79,11 @@ TIME_ZONE = "Europe/Prague"
 USE_I18N = True
 USE_TZ = True
 
+APP_ENVIRONMENT = os.environ.get("APP_ENVIRONMENT", "development")
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", BASE_DIR.parent / "media"))
+
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]

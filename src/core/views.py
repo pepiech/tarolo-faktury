@@ -1,4 +1,5 @@
 from django import get_version
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import connection
@@ -41,6 +42,15 @@ def home(request):
     )
 
 
+def deployed_revision():
+    """Commit zapsaný deploy skriptem do <release>/REVISION; lokálně 'dev'."""
+    revision_file = settings.BASE_DIR.parent / "REVISION"
+    try:
+        return revision_file.read_text(encoding="ascii").strip()[:40] or "dev"
+    except OSError:
+        return "dev"
+
+
 def health(request):
     try:
         database_status()
@@ -50,7 +60,9 @@ def health(request):
     return JsonResponse(
         {
             "status": "ok",
-            "application": "helloapp",
+            "application": "faktury",
+            "environment": settings.APP_ENVIRONMENT,
+            "revision": deployed_revision(),
             "database": "postgresql",
         }
     )

@@ -24,3 +24,23 @@ class HomePageTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "not-an-email")
         self.assertContains(response, "Lokální kontrola serveru")
+
+
+class HealthTests(SimpleTestCase):
+    @patch("core.views.database_status", return_value="17")
+    def test_reports_ok_with_environment_and_revision(self, _database_status):
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["application"], "faktury")
+        self.assertIn("environment", payload)
+        self.assertRegex(payload["revision"], r"^(dev|[0-9a-f]{40})$")
+
+    @patch("core.views.database_status", side_effect=RuntimeError("db down"))
+    def test_returns_503_when_database_unavailable(self, _database_status):
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["database"], "unavailable")

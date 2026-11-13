@@ -122,6 +122,41 @@ systemctl restart helloapp
 
 Zdrojový kód na Windows je autoritativně uložen v `D:\projekty\tarolo-miniPC-webserver-102\src`. Při budoucím nasazování nejprve udělat zálohu, zkopírovat změněné soubory přes `scp`, nastavit jejich vlastníka na `helloapp:helloapp`, spustit kontrolu a migrace a teprve potom restartovat službu. Skript `deploy/install.sh` slouží hlavně k reprodukci instalace na čistém serveru; tajné údaje negeneruje znovu, pokud `/etc/helloapp.env` už existuje.
 
+## Staging, CI a automatické nasazení
+
+| Prostředí | Hostname | Služba | Port | Databáze | Nasazuje se |
+|---|---|---|---|---|---|
+| staging | `faktury-test.vagasutca.org` | `faktury-staging.service` | 8102 | `faktury_staging` | automaticky z `main` po zelených testech |
+| produkce | `faktury.vagasutca.org` | zatím `helloapp.service` | 8101 | `helloapp` | ručně; později z tagu `v*` |
+
+Tok: push do `main` → GitHub Actions (`.github/workflows/ci.yml`) spustí testy proti PostgreSQL 17 → job `deploy-staging` běží na self-hosted runneru v LXC (uživatel `ghrunner`, štítek `faktury-deploy`) → `sudo /usr/local/sbin/faktury-deploy staging <sha>`.
+
+`faktury-deploy` (zdroj `deploy/lxc/faktury-deploy`): fetch do `/srv/repos/tarolo-faktury`, ověření, že commit je v `main`, `pg_dump` do `/srv/apps/faktury-<env>/backups` (posledních 20), nový adresář v `releases/` s vlastním venv, `check --deploy`, `migrate`, `collectstatic`, atomické přepnutí symlinku `current`, restart, health check. Když health check selže, vrátí předchozí release (migrace se nevracejí, záloha DB je vypsána). Drží se 5 posledních release. Kód release je pro běžící službu jen ke čtení.
+
+Runner nemá žádná práva kromě spuštění `faktury-deploy staging <sha>` přes sudo; tajné údaje z `/etc/faktury/*.env` nečte. Deploy skript na serveru se z repozitáře **neaktualizuje sám** – po jeho změně je nutné znovu spustit `setup-env.sh` (záměrně, aby se root kód měnil jen ručně).
+
+Jednorázová instalace v LXC (jako root):
+
+```bash
+git -C /srv/repos/tarolo-faktury pull --ff-only
+bash /srv/repos/tarolo-faktury/deploy/lxc/setup-env.sh staging 8102 faktury-test.vagasutca.org
+bash /srv/repos/tarolo-faktury/deploy/lxc/setup-runner.sh
+```
+
+Užitečné příkazy:
+
+```bash
+systemctl status faktury-staging --no-pager
+tail -n 100 /var/log/faktury-staging/application.log
+curl -fsS http://127.0.0.1:8102/health/        # obsahuje i nasazený commit
+cd /opt/actions-runner && ./svc.sh status
+ls -l /srv/apps/faktury-staging/current /srv/apps/faktury-staging/releases
+```
+
+Ruční návrat na starší verzi: `ln -sfn <release> /srv/apps/faktury-staging/current && systemctl restart faktury-staging`.
+
+Lokální testy: `pip install -r requirements.lock.txt -r requirements-dev.txt` a `pytest` (potřebuje proměnné `DJANGO_SECRET_KEY` a `POSTGRES_*`).
+
 ## Bezpečnostní zásady
 
 1. Neotevírat port 8101 v UFW ani na routeru.
@@ -169,6 +204,8 @@ Plánované zálohy mohou mířit lokálně na notebook a šifrovaně na USB SSD
 - `deploy/helloapp.logrotate` – denní rotace aplikačního logu, 14 archivů
 - `requirements.txt` – deklarované Python závislosti
 - `requirements.lock.txt` – přesné instalované verze (doplněno po nasazení)
+- `deploy/lxc/` – instalace prostředí (`setup-env.sh`), runneru (`setup-runner.sh`) a deploy skript (`faktury-deploy`)
+- `.github/workflows/ci.yml` – testy a automatické nasazení na staging
 - `README.md` – tento provozní runbook
 
 ## Kontrolní seznam pro další chat

@@ -1,0 +1,149 @@
+#!/bin/bash
+# Nasazení konkrétního commitu do prostředí aplikace faktury.
+# Instaluje se do /usr/local/sbin/faktury-deploy (root:root 0755) skriptem setup-env.sh;
+# změny v repozitáři se na server dostanou až dalším spuštěním setup-env.sh.
+#
+# Použití: faktury-deploy <staging|production> <40znakový SHA commitu>
+#
+# Postup: fetch -> ověření commitu -> záloha DB -> nový release adresář -> venv + závislosti
+# -> migrate -> collectstatic -> check --deploy -> přepnutí symlinku current -> restart
+# -> health check -> při selhání návrat na předchozí release.
+set -euo pipefail
+umask 027
+
+die() { echo "CHYBA: $*" >&2; exit 1; }
+
+[ "$(id -u)" -eq 0 ] || die "musí běžet jako root"
+[ "$#" -eq 2 ] || die "použití: faktury-deploy <staging|production> <sha>"
+ENV_NAME=$1
+SHA=$2
+[[ "$ENV_NAME" =~ ^(staging|production)$ ]] || die "neznámé prostředí"
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "SHA musí mít 40 hexadecimálních znaků"
+
+REPO=/srv/repos/tarolo-faktury
+APP_USER="faktury-$ENV_NAME"
+APP_ROOT="/srv/apps/faktury-$ENV_NAME"
+ENV_FILE="/etc/faktury/$ENV_NAME.env"
+SERVICE="faktury-$ENV_NAME"
+KEEP_RELEASES=5
+KEEP_BACKUPS=20
+
+[ -f "$ENV_FILE" ] || die "chybí $ENV_FILE (spusť setup-env.sh)"
+[ -d "$REPO/.git" ] || [ -f "$REPO/HEAD" ] || die "chybí repozitář $REPO"
+
+exec 9>"/run/lock/faktury-deploy-$ENV_NAME.lock"
+flock -n 9 || die "jiné nasazení $ENV_NAME právě běží"
+
+env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; }
+DB_NAME=$(env_value POSTGRES_DB)
+BIND=$(env_value GUNICORN_BIND)
+
+echo "==> Stahuji změny z GitHubu"
+git -C "$REPO" fetch --quiet --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+git -C "$REPO" cat-file -e "$SHA^{commit}" 2>/dev/null || die "commit $SHA v repozitáři neexistuje"
+
+case "$ENV_NAME" in
+    staging)
+        git -C "$REPO" merge-base --is-ancestor "$SHA" origin/main || die "commit není ve větvi main"
+        ;;
+    production)
+        git -C "$REPO" tag --points-at "$SHA" | grep -Eq '^v[0-9]' || die "produkce přijímá jen commit s tagem v*"
+        ;;
+esac
+
+PREVIOUS=""
+if [ -L "$APP_ROOT/current" ]; then
+    PREVIOUS=$(readlink -f "$APP_ROOT/current")
+fi
+
+STAMP=$(date +%Y%m%d-%H%M%S)
+RELEASE="$APP_ROOT/releases/$STAMP-${SHA:0:12}"
+
+echo "==> Záloha databáze $DB_NAME"
+BACKUP="$APP_ROOT/backups/$DB_NAME-$STAMP.dump"
+runuser -u postgres -- pg_dump --format=custom "$DB_NAME" > "$BACKUP"
+chmod 0600 "$BACKUP"
+ls -1t "$APP_ROOT"/backups/*.dump 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f --
+echo "    $BACKUP"
+
+echo "==> Release $RELEASE"
+install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$RELEASE"
+git -C "$REPO" archive "$SHA" | runuser -u "$APP_USER" -- tar -x -C "$RELEASE"
+echo "$SHA" > "$RELEASE/REVISION"
+
+as_app() {
+    runuser -u "$APP_USER" -- env -i PATH=/usr/local/bin:/usr/bin:/bin HOME="$APP_ROOT" \
+        PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PYTHONDONTWRITEBYTECODE=1 "$@"
+}
+manage() {
+    as_app sh -c 'set -a; . "$1"; set +a; cd "$2/src"; shift 2; exec "$0" manage.py "$@"' \
+        "$RELEASE/venv/bin/python" "$ENV_FILE" "$RELEASE" "$@"
+}
+
+fail_release() {
+    echo "CHYBA: $*" >&2
+    echo "Nový release se nepoužije; běží dál předchozí verze." >&2
+    rm -rf -- "$RELEASE"
+    exit 1
+}
+
+echo "==> Virtuální prostředí a závislosti"
+REQUIREMENTS="$RELEASE/requirements.lock.txt"
+[ -f "$REQUIREMENTS" ] || REQUIREMENTS="$RELEASE/requirements.txt"
+as_app python3 -m venv "$RELEASE/venv" || fail_release "nelze vytvořit venv"
+as_app "$RELEASE/venv/bin/pip" install --quiet --requirement "$REQUIREMENTS" || fail_release "instalace závislostí selhala"
+
+echo "==> Kontrola, migrace, statické soubory"
+manage check --deploy --fail-level ERROR || fail_release "manage.py check selhal"
+manage migrate --noinput || fail_release "migrace selhala (záloha: $BACKUP)"
+manage collectstatic --noinput --verbosity 0 || fail_release "collectstatic selhal"
+
+# Kód aplikace je pro běžící službu pouze ke čtení.
+chown -R root:"$APP_USER" "$RELEASE"
+chmod -R u=rwX,g=rX,o= "$RELEASE"
+
+switch_to() {
+    ln -sfn "$1" "$APP_ROOT/current.new"
+    mv -T "$APP_ROOT/current.new" "$APP_ROOT/current"
+}
+
+health_ok() {
+    local _attempt
+    for _attempt in $(seq 1 20); do
+        if curl -fsS --max-time 3 "http://$BIND/health/" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
+echo "==> Přepínám na nový release a restartuji $SERVICE"
+switch_to "$RELEASE"
+systemctl restart "$SERVICE"
+
+if health_ok; then
+    echo "==> Health check OK"
+else
+    echo "CHYBA: health check selhal" >&2
+    tail -n 40 "/var/log/faktury-$ENV_NAME/application.log" >&2 || true
+    if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
+        echo "==> Vracím předchozí release $PREVIOUS" >&2
+        switch_to "$PREVIOUS"
+        systemctl restart "$SERVICE"
+        health_ok && echo "    předchozí verze běží" >&2 || echo "    ani předchozí verze neodpovídá!" >&2
+        rm -rf -- "$RELEASE"
+        echo "Pozor: migrace se nevracejí automaticky. Záloha DB: $BACKUP" >&2
+    fi
+    exit 1
+fi
+
+echo "==> Úklid starých release"
+CURRENT=$(readlink -f "$APP_ROOT/current")
+ls -1dt "$APP_ROOT"/releases/*/ 2>/dev/null | sed 's:/$::' | while read -r dir; do
+    [ "$dir" = "$CURRENT" ] && continue
+    echo "$dir"
+done | tail -n +"$KEEP_RELEASES" | xargs -r rm -rf --
+
+echo
+echo "Nasazeno: $ENV_NAME = $SHA"
