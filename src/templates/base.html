@@ -56,6 +56,14 @@ document.addEventListener("htmx:configRequest", function (e) {
   if (t) { e.detail.headers["X-CSRFToken"] = t.value; }
 });
 </script>
+<script>
+// Široké tabulky se na úzkém displeji posouvají samy, ne celá stránka.
+document.querySelectorAll("table.data:not(.lines)").forEach(function (t) {
+  if (t.parentElement.classList.contains("table-scroll")) return;
+  var w = document.createElement("div"); w.className = "table-scroll";
+  t.parentNode.insertBefore(w, t); w.appendChild(t);
+});
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

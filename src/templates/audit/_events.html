@@ -5,7 +5,7 @@
   <tr>
     <td>{{ e.at|cz_date }}</td><td>{{ e.actor|default:"systém" }}</td><td>{{ e.get_interface_display }}</td>
     <td>{{ e.profile|default:"" }}</td><td><code>{{ e.action }}</code></td><td>{{ e.object_type }} #{{ e.object_id }}</td>
-    <td>{% if e.before %}<div class="muted" title="{{ e.before }}">před: {{ e.before|truncatechars:240 }}</div>{% endif %}{% if e.after %}<div title="{{ e.after }}">po: {{ e.after|truncatechars:240 }}</div>{% endif %}{% if e.note %}<div><em>{{ e.note }}</em></div>{% endif %}</td>
+    <td class="wrap">{% if e.before %}<div class="muted" title="{{ e.before }}">před: {{ e.before|truncatechars:240 }}</div>{% endif %}{% if e.after %}<div title="{{ e.after }}">po: {{ e.after|truncatechars:240 }}</div>{% endif %}{% if e.note %}<div><em>{{ e.note }}</em></div>{% endif %}</td>
   </tr>
   {% empty %}<tr><td colspan="7" class="muted">Žádné záznamy.</td></tr>
   {% endfor %}

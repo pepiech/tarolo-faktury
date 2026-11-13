@@ -99,3 +99,38 @@ def test_user_without_access_sees_nothing(browser_for, make_user, make_profile):
     assert page.get_by_text("Nemáte přidělený žádný fakturační profil").is_visible()
     response = page.goto(f"/p/{profile.slug}/faktury/")
     assert response.status == 404
+
+
+def test_no_horizontal_overflow_on_mobile(browser, live_server, make_user, make_profile, make_partner):
+    """Na šířce telefonu (390 px) žádná stránka nepřetéká do strany; široké tabulky se posouvají samy."""
+    from accounts.permissions import Actor
+    from conftest import header_for, line
+    from invoicing import services
+
+    profile = make_profile("f13", "06646654", name="F13 CyberTech s.r.o.")
+    partner = make_partner(profile, name="Velmi dlouhý název odběratele s.r.o. pro test zalamování")
+    admin = make_user("admin@test.cz", admin=True)
+    actor = Actor(user=admin)
+    inv = services.create_draft(actor, profile, header_for(profile, partner),
+                                [line("Servisní práce dle smlouvy SM201604 – správa počítačů a sítě")])
+    inv = services.issue(actor, inv, inv.version)
+    draft = services.create_draft(actor, profile, header_for(profile, partner), [line()])
+
+    context = browser.new_context(
+        base_url=live_server.url, viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True,
+        extra_http_headers={"Cf-Access-Jwt-Assertion": make_token(admin.email)},
+    )
+    page = context.new_page()
+    s = profile.slug
+    paths = [
+        "/", f"/p/{s}/", f"/p/{s}/faktury/", f"/p/{s}/faktury/nova/", f"/p/{s}/faktury/{inv.pk}/",
+        f"/p/{s}/faktury/{draft.pk}/vystavit/", f"/p/{s}/faktury/{draft.pk}/upravit/", f"/p/{s}/partneri/",
+        f"/p/{s}/partneri/{partner.pk}/", f"/p/{s}/nastaveni/", f"/p/{s}/nastaveni/upravit/",
+        "/sprava/uzivatele/", f"/sprava/uzivatele/{admin.pk}/", "/sprava/profily/", "/sprava/audit/",
+        "/sprava/souhrn/",
+    ]
+    for path in paths:
+        page.goto(path)
+        sw, w = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
+        assert sw <= w, f"{path}: stránka je široká {sw} px při displeji {w} px"
+    context.close()

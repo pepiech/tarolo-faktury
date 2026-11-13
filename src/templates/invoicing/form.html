@@ -19,20 +19,20 @@
     <tbody id="lines-body">
     {% for f in formset %}
       <tr class="line-row">
-        <td>{{ f.description }}{{ f.description.errors }}{% for h in f.hidden_fields %}{{ h }}{% endfor %}</td>
-        <td>{{ f.quantity }}{{ f.quantity.errors }}</td><td>{{ f.unit }}</td>
-        <td>{{ f.unit_price }}{{ f.unit_price.errors }}</td><td>{{ f.discount_percent }}{{ f.discount_percent.errors }}</td>
-        <td>{{ f.vat_rate_percent }}</td>
-        <td><span style="display:none">{{ f.DELETE }}</span><button type="button" class="small secondary remove-line" title="Odebrat položku">×</button></td>
+        <td class="c-desc" data-label="Popis plnění">{{ f.description }}{{ f.description.errors }}{% for h in f.hidden_fields %}{{ h }}{% endfor %}</td>
+        <td data-label="Množství">{{ f.quantity }}{{ f.quantity.errors }}</td><td data-label="MJ">{{ f.unit }}</td>
+        <td data-label="Cena/MJ bez DPH">{{ f.unit_price }}{{ f.unit_price.errors }}</td><td data-label="Sleva %">{{ f.discount_percent }}{{ f.discount_percent.errors }}</td>
+        <td data-label="DPH %">{{ f.vat_rate_percent }}</td>
+        <td class="c-del"><span style="display:none">{{ f.DELETE }}</span><button type="button" class="small secondary remove-line" title="Odebrat položku">×</button></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
   <template id="line-template">
     <tr class="line-row">
-      <td>{{ formset.empty_form.description }}</td><td>{{ formset.empty_form.quantity }}</td><td>{{ formset.empty_form.unit }}</td>
-      <td>{{ formset.empty_form.unit_price }}</td><td>{{ formset.empty_form.discount_percent }}</td><td>{{ formset.empty_form.vat_rate_percent }}</td>
-      <td><span style="display:none">{{ formset.empty_form.DELETE }}</span><button type="button" class="small secondary remove-line">×</button></td>
+      <td class="c-desc" data-label="Popis plnění">{{ formset.empty_form.description }}</td><td data-label="Množství">{{ formset.empty_form.quantity }}</td><td data-label="MJ">{{ formset.empty_form.unit }}</td>
+      <td data-label="Cena/MJ bez DPH">{{ formset.empty_form.unit_price }}</td><td data-label="Sleva %">{{ formset.empty_form.discount_percent }}</td><td data-label="DPH %">{{ formset.empty_form.vat_rate_percent }}</td>
+      <td class="c-del"><span style="display:none">{{ formset.empty_form.DELETE }}</span><button type="button" class="small secondary remove-line">×</button></td>
     </tr>
   </template>
   <div class="actions"><button type="button" class="secondary small" id="add-line">+ Přidat položku</button></div>

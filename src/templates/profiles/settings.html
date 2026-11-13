@@ -41,7 +41,7 @@
 </div>
 <div class="card">
   <div class="actions" style="margin-top:0"><strong style="flex:1">Režimy DPH</strong><a class="button small" href="{% url 'profiles:item_create' slug=profile.slug kind='rezimy' %}">Přidat</a></div>
-  <table class="data"><tbody>{% for r in regimes %}<tr><td><a href="{% url 'profiles:item_edit' slug=profile.slug kind='rezimy' pk=r.pk %}">{{ r.label }}</a></td><td>{{ r.applies_vat|yesno:"počítá DPH,bez DPH" }}</td><td class="muted">{{ r.invoice_text }}</td></tr>{% endfor %}</tbody></table>
+  <table class="data"><tbody>{% for r in regimes %}<tr><td><a href="{% url 'profiles:item_edit' slug=profile.slug kind='rezimy' pk=r.pk %}">{{ r.label }}</a></td><td>{{ r.applies_vat|yesno:"počítá DPH,bez DPH" }}</td><td class="muted wrap">{{ r.invoice_text }}</td></tr>{% endfor %}</tbody></table>
 </div>
 </div>
 

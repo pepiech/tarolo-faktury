@@ -12,7 +12,7 @@
       <td><a href="{% url 'accounts:user_edit' pk=u.pk %}">{{ u.name }}</a></td>
       <td>{{ u.email }}</td>
       <td>{% if u.is_active %}aktivní{% else %}<span class="badge badge-muted">deaktivovaný</span>{% endif %}</td>
-      <td>{% if u.is_admin %}<span class="badge badge-issued">admin</span>{% endif %}
+      <td class="wrap">{% if u.is_admin %}<span class="badge badge-issued">admin</span>{% endif %}
         {% for m in u.memberships.all %}<div><strong>{{ m.profile.name }}:</strong> {{ m.perms|join:", " }}</div>{% endfor %}</td>
       <td>{{ u.last_login_at|cz_date }}</td>
     </tr>

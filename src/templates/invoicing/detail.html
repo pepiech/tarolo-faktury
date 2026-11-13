@@ -62,7 +62,7 @@
 <h2>Položky</h2>
 <table class="data">
   <thead><tr><th>Popis</th><th class="num">Množství</th><th class="num">Cena/MJ</th><th class="num">Sleva %</th><th class="num">DPH %</th><th class="num">Základ</th><th class="num">DPH</th><th class="num">Celkem</th></tr></thead>
-  <tbody>{% for l in lines %}<tr><td>{{ l.description }}</td><td class="num">{{ l.quantity|qty }} {{ l.unit }}</td><td class="num">{{ l.unit_price|money }}</td><td class="num">{{ l.discount_percent|money }}</td><td class="num">{{ l.vat_rate_percent|percent }}</td><td class="num">{{ l.line_base|money }}</td><td class="num">{{ l.line_vat|money }}</td><td class="num">{{ l.line_total|money }}</td></tr>{% endfor %}</tbody>
+  <tbody>{% for l in lines %}<tr><td class="wrap">{{ l.description }}</td><td class="num">{{ l.quantity|qty }} {{ l.unit }}</td><td class="num">{{ l.unit_price|money }}</td><td class="num">{{ l.discount_percent|money }}</td><td class="num">{{ l.vat_rate_percent|percent }}</td><td class="num">{{ l.line_base|money }}</td><td class="num">{{ l.line_vat|money }}</td><td class="num">{{ l.line_total|money }}</td></tr>{% endfor %}</tbody>
 </table>
 
 {% if not invoice.is_draft %}
@@ -72,7 +72,7 @@
   <tbody>
   {% for p in payments %}
     <tr><td>{{ p.paid_on|cz_date }}</td><td class="num">{{ p.amount|czk }}</td><td>{{ p.get_method_display }}</td><td>{{ p.reference }}</td>
-      <td>{{ p.note }}{% if p.reverses %} <span class="badge badge-muted">protioperace</span>{% endif %}</td><td>{{ p.created_by }}</td>
+      <td class="wrap">{{ p.note }}{% if p.reverses %} <span class="badge badge-muted">protioperace</span>{% endif %}</td><td>{{ p.created_by }}</td>
       <td>{% if perm.invoices_modify and p.amount > 0 and not p.reverses_id %}{% if not p.reversal %}<form method="post" action="{% url 'invoicing:payment_reverse' slug=active_profile.slug pk=invoice.pk payment_pk=p.pk %}" class="inline-form" onsubmit="return confirm('Zrušit platbu protioperací?')">{% csrf_token %}<button type="submit" class="small secondary">Zrušit</button></form>{% endif %}{% endif %}</td></tr>
   {% empty %}<tr><td colspan="7" class="muted">Žádné platby.</td></tr>{% endfor %}
   </tbody>
