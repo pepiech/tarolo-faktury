@@ -363,6 +363,8 @@ def present(events):
             p = partners[pk]
             label = f"Partner {p.name}"
             url = _url("partners:detail", slug=p.profile.slug, pk=p.pk)
+        elif e.object_type == "profiles.billingprofile" and e.profile is not None and str(e.profile_id) == e.object_id:
+            label = f"Profil {e.profile.name}"
         summary = _summary(e, model, refs)
         text = _summary_text(summary)
         if e.note and e.action != "mcp.call":

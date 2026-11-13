@@ -174,4 +174,6 @@ def test_audit_rows_single_line_and_expandable(browser_for, make_user, make_prof
     assert '"version": 2' in detail.locator("details.raw pre").inner_text()
     row.locator(".audit-toggle").click()
     assert not detail.is_visible()
-    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    for width in (1280, 1024, 900, 820):  # bez vodorovného posouvání i na menších noteboocích/tabletech
+        page.set_viewport_size({"width": width, "height": 900})
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), width
