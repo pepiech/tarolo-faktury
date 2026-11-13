@@ -12,7 +12,7 @@ from core.concurrency import ConcurrentUpdate, lock_and_check
 from core.decorators import profile_view
 from invoicing.models import Invoice
 
-from . import services
+from . import ares, services
 from .forms import CopyPartnerForm, PartnerForm
 from .models import Partner
 
@@ -84,8 +84,26 @@ def partner_edit(request, profile, pk=None):
             messages.error(request, exc.message)
             return redirect(request.path)
     else:
-        form = PartnerForm(instance=partner)
-    return render(request, "partners/form.html", {"form": form, "partner": partner})
+        initial = {}
+        ares_ico = request.GET.get("ares", "").strip()
+        if ares_ico and not pk:
+            try:
+                found = ares.lookup(ares_ico)
+                if found is None:
+                    messages.warning(request, f"IČO {ares_ico} v ARES nebylo nalezeno.")
+                else:
+                    initial = {k: v for k, v in found.items() if k in PartnerForm.Meta.fields}
+                    if found["dissolved_on"]:
+                        messages.warning(request, f"Subjekt zanikl {found['dissolved_on']}.")
+                    messages.info(request, "Údaje předvyplněny z ARES – zkontrolujte je a uložte.")
+                    dupes = services.duplicates(profile, Partner(**initial))
+                    for d in dupes:
+                        messages.warning(request, f"Partner s tímto IČO už v profilu existuje: {d.name}.")
+            except ares.AresError as exc:
+                messages.error(request, str(exc))
+        form = PartnerForm(instance=partner, initial=initial)
+    return render(request, "partners/form.html", {"form": form, "partner": partner,
+                                                  "ares_ico": request.GET.get("ares", "")})
 
 
 @profile_view(admin=True)

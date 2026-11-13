@@ -142,6 +142,13 @@ pytest                                  # vč. E2E v Chromiu (python -m playwrig
 pytest --browser-channel chrome         # E2E se systémovým Chrome
 ```
 
+## MCP server (2. etapa)
+
+- Endpoint `https://<hostname>/mcp/` (MCP Streamable HTTP, bezstavový, JSON). Kód v `src/mcpapi/`, popis nástrojů a chyb v `fakturační aplikace/mcp-schema.md` (generuje `python src/manage.py mcp_schema`; test hlídá aktuálnost).
+- Ověření: Cloudflare Access **Managed OAuth** na Access aplikaci – MCP klient (Claude, Claude Code…) projde přihlášením Cloudflare a aplikace dostane stejné `Cf-Access-Jwt-Assertion` jako z prohlížeče. Žádný vlastní OAuth server ani tokeny v aplikaci.
+- Nástroje volají stejné služby jako web (oprávnění, audit s rozhraním `mcp`, neměnnost dokladů). Zápisy vyžadují výslovný profil a `client_request_id` (tabulka `mcpapi_idempotencyrecord`); vystavení a storno navíc `confirm=true`.
+- Partnery lze dohledat a založit z ARES (`partners/ares.py`, veřejné REST API MF ČR); ve webu tlačítko „Načíst z ARES“ jen předvyplní formulář.
+
 ## Staging, CI a automatické nasazení
 
 | Prostředí | Hostname | Služba | Port | Databáze | Nasazuje se |

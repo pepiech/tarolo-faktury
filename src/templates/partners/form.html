@@ -2,6 +2,15 @@
 {% block title %}{% if partner.pk %}{{ partner.name }}{% else %}Nový partner{% endif %}{% endblock %}
 {% block content %}
 <h1>{% if partner.pk %}Upravit partnera {{ partner.name }}{% else %}Nový partner{% endif %}</h1>
+{% if not partner.pk %}
+<form method="get" class="card" data-testid="ares-form">
+  <div class="grid3">
+    <div class="field"><label for="ares-ico">IČO pro načtení z ARES</label><input type="text" id="ares-ico" name="ares" value="{{ ares_ico }}" inputmode="numeric" maxlength="8" placeholder="např. 06646654"></div>
+    <div class="field"><label>&nbsp;</label><button type="submit" class="secondary">Načíst z ARES</button></div>
+  </div>
+  <div class="helptext">Údaje z ARES se jen předvyplní – před uložením je zkontrolujte.</div>
+</form>
+{% endif %}
 <form method="post" class="card">
   {% csrf_token %}{{ form.non_field_errors }}{{ form.version }}
   <div class="grid3">{% for field in form %}{% if field.name != "version" %}{% include "_field.html" %}{% endif %}{% endfor %}</div>
