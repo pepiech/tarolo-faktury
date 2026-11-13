@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Nový profil{% endblock %}
+{% block content %}
+<h1>Nový fakturační profil</h1>
+{% include "accounts/_nav.html" %}
+<form method="post" class="card">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  <div class="grid3">
+    {% for field in form %}
+      <div class="field">{% if field.field.widget.input_type == "checkbox" %}<label>{{ field }} {{ field.label }}</label>{% else %}{{ field.label_tag }}{{ field }}{% endif %}{{ field.errors }}{% if field.help_text %}<div class="helptext">{{ field.help_text }}</div>{% endif %}</div>
+    {% endfor %}
+  </div>
+  <p class="muted">Bankovní účet, logo a další nastavení doplníte po založení. Údaje z internetu (ARES) se nepřebírají automaticky.</p>
+  <div class="actions"><button type="submit">Založit profil</button></div>
+</form>
+{% endblock %}

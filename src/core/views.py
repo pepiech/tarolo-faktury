@@ -1,10 +1,10 @@
 from django import get_version
 from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
 from django.db import connection
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+
+from accounts.permissions import accessible_profiles
 
 
 def database_status():
@@ -14,32 +14,10 @@ def database_status():
 
 
 def home(request):
-    try:
-        postgres_version = database_status()
-        database_ok = True
-    except Exception:
-        postgres_version = "nedostupné"
-        database_ok = False
-
-    access_email = (
-        request.headers.get("Cf-Access-Authenticated-User-Email", "").strip().lower()
-    )
-    try:
-        validate_email(access_email)
-    except ValidationError:
-        access_email = ""
-
-    return render(
-        request,
-        "core/home.html",
-        {
-            "database_ok": database_ok,
-            "django_version": ".".join(get_version().split(".")[:2]),
-            "postgres_version": postgres_version,
-            "access_email": access_email,
-        },
-        status=200 if database_ok else 503,
-    )
+    profiles = list(accessible_profiles(request.user))
+    if len(profiles) == 1 and not request.user.is_admin:
+        return redirect("reports:dashboard", slug=profiles[0].slug)
+    return render(request, "core/home.html", {"profiles": profiles})
 
 
 def deployed_revision():
@@ -53,10 +31,9 @@ def deployed_revision():
 
 def health(request):
     try:
-        database_status()
+        postgres = database_status()
     except Exception:
         return JsonResponse({"status": "error", "database": "unavailable"}, status=503)
-
     return JsonResponse(
         {
             "status": "ok",
@@ -64,5 +41,7 @@ def health(request):
             "environment": settings.APP_ENVIRONMENT,
             "revision": deployed_revision(),
             "database": "postgresql",
+            "postgres_version": postgres,
+            "django_version": get_version(),
         }
     )

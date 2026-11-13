@@ -1,0 +1,17 @@
+<table class="data" data-testid="invoice-table">
+  <thead><tr><th>Číslo</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th class="num">Celkem</th><th class="num">Zbývá</th><th>Stav</th><th>Předání</th></tr></thead>
+  <tbody>
+  {% for inv in invoices %}
+    <tr class="{% if inv.status == 'cancelled' %}cancelled{% endif %}">
+      <td><a href="{% url 'invoicing:detail' slug=inv.profile.slug pk=inv.pk %}">{{ inv.display_number }}</a></td>
+      <td>{{ inv.partner.name }}</td>
+      <td>{{ inv.issue_date|cz_date }}</td>
+      <td>{{ inv.due_date|cz_date }}</td>
+      <td class="num">{{ inv.total|czk }}</td>
+      <td class="num">{% if inv.status == "issued" %}{{ inv.remaining_amount|czk }}{% endif %}</td>
+      <td>{% include "invoicing/_badges.html" %}</td>
+      <td>{% if inv.status != "draft" %}{{ inv.get_delivery_status_display }}{% endif %}</td>
+    </tr>
+  {% empty %}<tr><td colspan="8" class="muted">Žádné faktury.</td></tr>{% endfor %}
+  </tbody>
+</table>

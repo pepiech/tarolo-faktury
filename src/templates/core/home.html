@@ -1,84 +1,20 @@
-{% load static %}
-<!doctype html>
-<html lang="cs">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Bezpečný vstup do evidence faktur F13 CyberTech.">
-  <meta name="robots" content="noindex,nofollow">
-  <title>Evidence faktur · F13 CyberTech</title>
-  <link rel="stylesheet" href="{% static 'core/site.css' %}">
-</head>
-<body>
-  <a class="skip-link" href="#obsah">Přeskočit na obsah</a>
-
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="F13 CyberTech – úvod">
-      <img src="{% static 'core/f13-logo.svg' %}" alt="F13 CyberTech" width="224" height="62">
-    </a>
-
-    <div class="identity" aria-label="Přihlášený uživatel">
-      <span class="identity-mark" aria-hidden="true"></span>
-      <span>
-        <small>Přihlášení ověřeno</small>
-        <strong>{% if access_email %}{{ access_email }}{% else %}Lokální kontrola serveru{% endif %}</strong>
-      </span>
-    </div>
-  </header>
-
-  <main id="obsah">
-    <section class="intro" aria-labelledby="page-title">
-      <div class="intro-copy">
-        <p class="context">Interní systém F13 CyberTech</p>
-        <h1 id="page-title">Evidence faktur</h1>
-        <p class="lede">Bezpečné místo pro vystavování, evidenci a odesílání firemních faktur.</p>
-
-        <div class="release-note">
-          <span class="release-line" aria-hidden="true"></span>
-          <div>
-            <h2>Aplikace je připravená k vývoji</h2>
-            <p>Datový model a pracovní postup doplníme po potvrzení požadavků zadavatele.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="monogram" aria-hidden="true">
-        <span>F</span><span>13</span>
-      </div>
-    </section>
-
-    <section class="system" aria-labelledby="system-title">
-      <div class="system-heading">
-        <h2 id="system-title">Stav prostředí</h2>
-        <p>{% now "j. n. Y · H:i" %}</p>
-      </div>
-
-      <dl class="checks">
-        <div>
-          <dt>Přístup</dt>
-          <dd><span class="status-dot"></span>Cloudflare Access</dd>
-        </div>
-        <div>
-          <dt>Aplikace</dt>
-          <dd><span class="status-dot"></span>Django {{ django_version }} LTS</dd>
-        </div>
-        <div>
-          <dt>Databáze</dt>
-          <dd><span class="status-dot {% if not database_ok %}status-dot--error{% endif %}"></span>PostgreSQL {{ postgres_version }}</dd>
-        </div>
-        <div>
-          <dt>Rozhraní</dt>
-          <dd><span class="status-dot"></span>Šifrovaný přenos, neveřejný origin</dd>
-        </div>
-      </dl>
-
-      <a class="health-link" href="/health/">Technický stav systému</a>
-    </section>
-  </main>
-
-  <footer>
-    <p>F13 CyberTech s.r.o. <span>IČ 06646654</span></p>
-    <p>Interní aplikace · přístup je auditován</p>
-  </footer>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Výběr profilu{% endblock %}
+{% block content %}
+<h1>Fakturační profily</h1>
+{% if profiles %}
+<div class="tiles">
+  {% for p in profiles %}
+  <a class="tile" href="{% url 'reports:dashboard' slug=p.slug %}">
+    <strong>{{ p.name }}</strong><br><span class="muted">IČO {{ p.ico }}</span>
+    {% if not p.is_active %}<br><span class="badge badge-muted">deaktivovaný</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<p>Nemáte přidělený žádný fakturační profil. Obraťte se na správce.</p>
+{% endif %}
+{% if current_user.is_admin %}
+<p><a class="button" href="{% url 'accounts:global' %}">Souhrn všech profilů</a> <a class="button secondary" href="{% url 'accounts:profiles' %}">Správa profilů</a></p>
+{% endif %}
+{% endblock %}

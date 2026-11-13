@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Přehled{% endblock %}
+{% block content %}
+<h1>Přehled – {{ profile.name }}</h1>
+{% if not profile.is_active %}<ul class="messages"><li class="msg-warning">Profil je deaktivovaný: nelze vystavovat nové doklady, historie zůstává dostupná.</li></ul>{% endif %}
+{% if can_view %}
+{% include "reports/_year.html" %}
+<div class="stats" data-testid="summary">
+  <div class="stat"><div class="muted">Vystaveno ({{ summary.count }})</div><div class="v">{{ summary.issued|czk }}</div></div>
+  <div class="stat"><div class="muted">Uhrazeno</div><div class="v">{{ summary.paid|czk }}</div></div>
+  <div class="stat"><div class="muted">Zbývá uhradit</div><div class="v">{{ summary.remaining|czk }}</div></div>
+  <div class="stat danger"><div class="muted">Po splatnosti ({{ summary.overdue_count }})</div><div class="v">{{ summary.overdue|czk }}</div></div>
+  <div class="stat"><div class="muted">Rozpracované návrhy</div><div class="v">{{ summary.drafts }}</div></div>
+</div>
+<p class="muted">Stornované faktury a návrhy se do souhrnů nezapočítávají. Částky jsou jen za tento profil.</p>
+
+{% if perm.invoices_modify and profile.is_active %}<div class="actions"><a class="button" href="{% url 'invoicing:create' slug=profile.slug %}">Nová faktura</a></div>{% endif %}
+
+<h2>Upomínky k provedení</h2>
+<table class="data" data-testid="reminders-due">
+  <thead><tr><th>Faktura</th><th>Odběratel</th><th>Splatnost</th><th class="num">Dnů po splatnosti</th><th class="num">Zbývá</th><th>Doporučeno</th></tr></thead>
+  <tbody>{% for r in reminders %}<tr><td><a href="{% url 'invoicing:detail' slug=profile.slug pk=r.invoice.pk %}">{{ r.invoice.number }}</a></td><td>{{ r.invoice.partner.name }}</td><td>{{ r.invoice.due_date|cz_date }}</td><td class="num">{{ r.overdue_days }}</td><td class="num">{{ r.invoice.remaining_amount|czk }}</td><td>{{ r.rule.label }}</td></tr>
+  {% empty %}<tr><td colspan="6" class="muted">Nic k upomínání.</td></tr>{% endfor %}</tbody>
+</table>
+
+<h2>Po splatnosti</h2>
+{% include "invoicing/_table.html" with invoices=overdue %}
+<h2>Poslední faktury</h2>
+{% include "invoicing/_table.html" with invoices=recent %}
+{% else %}
+<p>V tomto profilu můžete spravovat partnery. <a href="{% url 'partners:list' slug=profile.slug %}">Přejít na partnery</a></p>
+{% endif %}
+{% endblock %}

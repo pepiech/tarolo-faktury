@@ -122,6 +122,26 @@ systemctl restart helloapp
 
 Zdrojový kód na Windows je autoritativně uložen v `D:\projekty\tarolo-miniPC-webserver-102\src`. Při budoucím nasazování nejprve udělat zálohu, zkopírovat změněné soubory přes `scp`, nastavit jejich vlastníka na `helloapp:helloapp`, spustit kontrolu a migrace a teprve potom restartovat službu. Skript `deploy/install.sh` slouží hlavně k reprodukci instalace na čistém serveru; tajné údaje negeneruje znovu, pokud `/etc/helloapp.env` už existuje.
 
+## Aplikace Faktury (1. etapa)
+
+Zadání: `fakturační aplikace/zadání/uvodni-zadani.md`, technický návrh: `fakturační aplikace/technicky-navrh.md`.
+
+- Moduly v `src/`: `accounts` (uživatelé, oprávnění, ověření Cloudflare Access JWT), `audit` (append-only log), `profiles` (fakturační profily, účty, DPH, číselné řady), `partners`, `invoicing` (faktury, výpočty `calc.py`, QR Platba `spayd.py`, PDF `pdf.py` + šablona `templates/invoicing/pdf/invoice.html`, služby `services.py`), `reports` (přehledy).
+- Veškerá logika včetně kontroly oprávnění a auditu je ve `services.py` jednotlivých modulů; views jsou tenké.
+- Přihlášení: middleware ověřuje podpis JWT z hlavičky `Cf-Access-Jwt-Assertion` proti JWKS `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs` (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` v `/etc/faktury/<env>.env`). Uživatel musí existovat a být aktivní; zakládá je správce v *Správa → Uživatelé*.
+- První správce a úvodní profily (F13, Martin Piech) vznikají příkazem `manage.py bootstrap`, který spouští deploy skript (e-maily z `BOOTSTRAP_ADMIN_EMAILS`). Bankovní účty se doplňují ručně v nastavení profilu.
+- Databázové triggery brání změně vystavené faktury, jejích položek, plateb a auditu i mimo aplikaci.
+
+Lokální vývoj a testy (PostgreSQL 16+):
+
+```bash
+pip install -r requirements.lock.txt -r requirements-dev.txt
+export DJANGO_SECRET_KEY=dev POSTGRES_DB=faktury POSTGRES_USER=faktury POSTGRES_PASSWORD=… POSTGRES_HOST=127.0.0.1
+ruff check src
+pytest                                  # vč. E2E v Chromiu (python -m playwright install chromium)
+pytest --browser-channel chrome         # E2E se systémovým Chrome
+```
+
 ## Staging, CI a automatické nasazení
 
 | Prostředí | Hostname | Služba | Port | Databáze | Nasazuje se |

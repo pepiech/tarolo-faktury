@@ -2,3 +2,6 @@ Django>=5.2,<5.3
 gunicorn>=23,<24
 psycopg[binary]>=3.2,<3.4
 whitenoise>=6.8,<7
+weasyprint>=66,<71
+segno>=1.6,<2
+PyJWT[crypto]>=2.10,<3

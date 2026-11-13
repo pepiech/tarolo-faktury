@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{% if edited.pk %}{{ edited.name }}{% else %}Nový uživatel{% endif %}{% endblock %}
+{% block content %}
+<h1>{% if edited.pk %}Uživatel {{ edited.name }}{% else %}Nový uživatel{% endif %}</h1>
+{% include "accounts/_nav.html" %}
+<form method="post" class="card">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {{ form.version }}
+  <div class="grid2">
+    <div class="field">{{ form.email.label_tag }}{{ form.email }}{{ form.email.errors }}<div class="helptext">Stejný e-mail, kterým se uživatel přihlašuje do Cloudflare Access.</div></div>
+    <div class="field">{{ form.name.label_tag }}{{ form.name }}{{ form.name.errors }}</div>
+    <div class="field"><label>{{ form.is_active }} aktivní</label><div class="helptext">Deaktivace zablokuje přístup, historie zůstává.</div></div>
+    <div class="field"><label>{{ form.is_admin }} globální správce (admin)</label><div class="helptext">Plný přístup ke všem profilům a správě.</div></div>
+  </div>
+  <h2>Oprávnění v profilech</h2>
+  <table class="data perm-grid">
+    <thead><tr><th>Profil</th><th>invoices:view<br><span class="muted">čtení dokladů</span></th><th>invoices:modify<br><span class="muted">návrhy, vystavení, platby</span></th><th>partners:modify<br><span class="muted">správa partnerů</span></th></tr></thead>
+    <tbody>
+    {% for profile, fields in form.permission_rows %}
+      <tr><td>{{ profile.name }} <span class="muted">IČO {{ profile.ico }}</span></td>{% for f in fields %}<td>{{ f }}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="actions"><button type="submit">Uložit</button> <a href="{% url 'accounts:users' %}">Zpět</a></div>
+</form>
+{% endblock %}

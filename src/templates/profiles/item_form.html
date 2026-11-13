@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}{% if item.pk %}: {{ item }}{% else %} – nový{% endif %}</h1>
+<form method="post" class="card">
+  {% csrf_token %}{{ form.non_field_errors }}{% if form.version %}{{ form.version }}{% endif %}
+  <div class="grid2">{% for field in form %}{% if field.name != "version" %}{% include "_field.html" %}{% endif %}{% endfor %}</div>
+  <div class="actions"><button type="submit">Uložit</button> <a href="{% url 'profiles:settings' slug=profile.slug %}">Zpět</a></div>
+</form>
+{% endblock %}

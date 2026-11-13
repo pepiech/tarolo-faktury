@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Faktura {{ invoice.display_number }}{% endblock %}
+{% block content %}
+<h1>Faktura {{ invoice.display_number }} {% with inv=invoice %}{% include "invoicing/_badges.html" %}{% endwith %}</h1>
+
+<div class="actions">
+  {% if invoice.is_draft %}
+    {% if perm.invoices_modify %}
+      <a class="button secondary" href="{% url 'invoicing:edit' slug=active_profile.slug pk=invoice.pk %}">Upravit návrh</a>
+      <a class="button" href="{% url 'invoicing:issue' slug=active_profile.slug pk=invoice.pk %}" data-testid="issue-link">Vystavit…</a>
+    {% endif %}
+    <a class="button secondary" href="{% url 'invoicing:preview_draft' slug=active_profile.slug pk=invoice.pk %}" target="_blank">Náhled PDF</a>
+    {% if perm.invoices_modify %}
+    <form method="post" action="{% url 'invoicing:delete' slug=active_profile.slug pk=invoice.pk %}" class="inline-form" onsubmit="return confirm('Opravdu smazat návrh?')">
+      {% csrf_token %}<input type="hidden" name="version" value="{{ invoice.version }}"><button type="submit" class="danger small">Smazat návrh</button>
+    </form>
+    {% endif %}
+  {% else %}
+    <a class="button" href="{% url 'invoicing:pdf' slug=active_profile.slug pk=invoice.pk %}?stahnout=1" data-testid="download-pdf">Stáhnout PDF</a>
+    <a class="button secondary" href="{% url 'invoicing:pdf' slug=active_profile.slug pk=invoice.pk %}" target="_blank">Zobrazit PDF</a>
+  {% endif %}
+</div>
+
+{% if invoice.is_draft and issue_problems %}
+<ul class="messages">{% for p in issue_problems %}<li class="msg-warning">Před vystavením: {{ p }}</li>{% endfor %}</ul>
+{% endif %}
+{% if invoice.status == "cancelled" %}
+<ul class="messages"><li class="msg-warning">Stornováno {{ invoice.cancelled_at|cz_date }} ({{ invoice.cancelled_by }}): {{ invoice.cancel_reason }}</li></ul>
+{% endif %}
+
+<div class="grid2">
+  <div class="card">
+    <dl class="kv">
+      <dt>Vystavitel</dt><dd><strong>{% if invoice.is_draft %}{{ active_profile.name }}, IČO {{ active_profile.ico }}{% else %}{{ invoice.issuer_snapshot.name }}, IČO {{ invoice.issuer_snapshot.ico }}{% endif %}</strong></dd>
+      <dt>Odběratel</dt><dd><a href="{% url 'partners:detail' slug=active_profile.slug pk=invoice.partner_id %}">{% if invoice.is_draft %}{{ invoice.partner.name }}{% else %}{{ invoice.partner_snapshot.name }}{% endif %}</a></dd>
+      <dt>Číselná řada</dt><dd>{{ invoice.series }}</dd>
+      <dt>Datum vystavení</dt><dd>{{ invoice.issue_date|cz_date }}</dd>
+      <dt>DUZP</dt><dd>{{ invoice.taxable_supply_date|cz_date }}</dd>
+      <dt>Splatnost</dt><dd>{{ invoice.due_date|cz_date }}</dd>
+      <dt>Forma úhrady</dt><dd>{{ invoice.get_payment_method_display }}</dd>
+      <dt>Účet</dt><dd>{% if invoice.is_draft %}{{ invoice.bank_account|default:"—" }}{% else %}{{ invoice.bank_snapshot.account_number|default:"—" }} {{ invoice.bank_snapshot.iban }}{% endif %}</dd>
+      <dt>VS / KS / SS</dt><dd>{{ invoice.variable_symbol|default:"—" }} / {{ invoice.constant_symbol|default:"—" }} / {{ invoice.specific_symbol|default:"—" }}</dd>
+      <dt>Režim DPH</dt><dd>{{ invoice.vat_regime }}</dd>
+      {% if invoice.order_reference %}<dt>Objednávka</dt><dd>{{ invoice.order_reference }}</dd>{% endif %}
+      {% if invoice.internal_note %}<dt>Interní poznámka</dt><dd>{{ invoice.internal_note|linebreaksbr }}</dd>{% endif %}
+      {% if invoice.issued_at %}<dt>Vystavil</dt><dd>{{ invoice.issued_by }} · {{ invoice.issued_at|cz_date }}</dd>{% endif %}
+    </dl>
+  </div>
+  <div class="card totals-box" style="max-width:none">
+    <table>
+      {% for row in invoice.vat_summary %}<tr><td>Základ {{ row.rate_percent }} %</td><td class="num">{{ row.base|czk }}</td></tr><tr><td>DPH {{ row.rate_percent }} %</td><td class="num">{{ row.vat|czk }}</td></tr>{% endfor %}
+      {% if invoice.rounding %}<tr><td>Zaokrouhlení</td><td class="num">{{ invoice.rounding|czk }}</td></tr>{% endif %}
+      <tr class="total"><td>Celkem</td><td class="num">{{ invoice.total|czk }}</td></tr>
+      {% if not invoice.is_draft %}
+      <tr><td>Uhrazeno</td><td class="num">{{ invoice.paid_amount|czk }}</td></tr>
+      <tr><td><strong>Zbývá uhradit</strong></td><td class="num"><strong data-testid="remaining">{{ invoice.remaining_amount|czk }}</strong></td></tr>
+      {% endif %}
+    </table>
+  </div>
+</div>
+
+<h2>Položky</h2>
+<table class="data">
+  <thead><tr><th>Popis</th><th class="num">Množství</th><th class="num">Cena/MJ</th><th class="num">Sleva %</th><th class="num">DPH %</th><th class="num">Základ</th><th class="num">DPH</th><th class="num">Celkem</th></tr></thead>
+  <tbody>{% for l in lines %}<tr><td>{{ l.description }}</td><td class="num">{{ l.quantity|qty }} {{ l.unit }}</td><td class="num">{{ l.unit_price|money }}</td><td class="num">{{ l.discount_percent|money }}</td><td class="num">{{ l.vat_rate_percent|percent }}</td><td class="num">{{ l.line_base|money }}</td><td class="num">{{ l.line_vat|money }}</td><td class="num">{{ l.line_total|money }}</td></tr>{% endfor %}</tbody>
+</table>
+
+{% if not invoice.is_draft %}
+<h2>Platby</h2>
+<table class="data">
+  <thead><tr><th>Datum</th><th class="num">Částka</th><th>Způsob</th><th>Reference</th><th>Poznámka</th><th>Zapsal</th><th></th></tr></thead>
+  <tbody>
+  {% for p in payments %}
+    <tr><td>{{ p.paid_on|cz_date }}</td><td class="num">{{ p.amount|czk }}</td><td>{{ p.get_method_display }}</td><td>{{ p.reference }}</td>
+      <td>{{ p.note }}{% if p.reverses %} <span class="badge badge-muted">protioperace</span>{% endif %}</td><td>{{ p.created_by }}</td>
+      <td>{% if perm.invoices_modify and p.amount > 0 and not p.reverses_id %}{% if not p.reversal %}<form method="post" action="{% url 'invoicing:payment_reverse' slug=active_profile.slug pk=invoice.pk payment_pk=p.pk %}" class="inline-form" onsubmit="return confirm('Zrušit platbu protioperací?')">{% csrf_token %}<button type="submit" class="small secondary">Zrušit</button></form>{% endif %}{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="7" class="muted">Žádné platby.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+{% if perm.invoices_modify and invoice.status == "issued" %}
+<div class="grid2" style="margin-top:12px">
+  <form method="post" action="{% url 'invoicing:payment_add' slug=active_profile.slug pk=invoice.pk %}" class="card">
+    <strong>Zapsat platbu</strong>{% csrf_token %}
+    <div class="grid2">{% for field in payment_form %}{% include "_field.html" %}{% endfor %}</div>
+    <button type="submit" data-testid="add-payment">Zapsat platbu</button>
+  </form>
+  <div>
+    <form method="post" action="{% url 'invoicing:delivered' slug=active_profile.slug pk=invoice.pk %}" class="card">
+      <strong>Předání / odeslání mimo aplikaci</strong>{% csrf_token %}
+      <div class="grid2">{% for field in delivery_form %}{% include "_field.html" %}{% endfor %}</div>
+      <button type="submit" class="secondary">Označit jako předané</button>
+    </form>
+    <form method="post" action="{% url 'invoicing:reminder' slug=active_profile.slug pk=invoice.pk %}" class="card">
+      <strong>Zaznamenat upomínku</strong>{% csrf_token %}
+      <div class="grid3">{% for field in reminder_form %}{% include "_field.html" %}{% endfor %}</div>
+      <button type="submit" class="secondary">Zaznamenat</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid2">
+  <div><h2>Předání</h2>
+    <table class="data"><tbody>{% for d in deliveries %}<tr><td>{{ d.delivered_on|cz_date }}</td><td>{{ d.note }}</td><td>{{ d.created_by }}</td></tr>{% empty %}<tr><td class="muted">Zatím nepředáno.</td></tr>{% endfor %}</tbody></table>
+  </div>
+  <div><h2>Upomínky</h2>
+    <table class="data"><tbody>{% for r in reminders %}<tr><td>{{ r.reminded_on|cz_date }}</td><td>{{ r.method }}</td><td>{{ r.result_note }}</td><td>{{ r.created_by }}</td></tr>{% empty %}<tr><td class="muted">Bez upomínek.</td></tr>{% endfor %}</tbody></table>
+  </div>
+</div>
+
+{% if perm.invoices_modify and invoice.status == "issued" %}
+<details class="card" style="margin-top:16px">
+  <summary><strong>Stornovat fakturu</strong></summary>
+  <p class="muted">Lze jen bez evidované úhrady. Číslo se znovu nepoužije, PDF zůstává.</p>
+  <form method="post" action="{% url 'invoicing:cancel' slug=active_profile.slug pk=invoice.pk %}">
+    {% csrf_token %}<input type="hidden" name="version" value="{{ invoice.version }}">
+    {% for field in cancel_form %}{% include "_field.html" %}{% endfor %}
+    <button type="submit" class="danger">Stornovat</button>
+  </form>
+</details>
+{% endif %}
+{% endif %}
+
+<h2>Historie změn</h2>
+{% include "audit/_events.html" with events=events %}
+{% endblock %}

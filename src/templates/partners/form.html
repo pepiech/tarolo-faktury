@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{% if partner.pk %}{{ partner.name }}{% else %}Nový partner{% endif %}{% endblock %}
+{% block content %}
+<h1>{% if partner.pk %}Upravit partnera {{ partner.name }}{% else %}Nový partner{% endif %}</h1>
+<form method="post" class="card">
+  {% csrf_token %}{{ form.non_field_errors }}{{ form.version }}
+  <div class="grid3">{% for field in form %}{% if field.name != "version" %}{% include "_field.html" %}{% endif %}{% endfor %}</div>
+  <p class="muted">Změna údajů partnera se neprojeví na již vystavených fakturách.</p>
+  <div class="actions"><button type="submit">Uložit</button> <a href="{% if partner.pk %}{% url 'partners:detail' slug=active_profile.slug pk=partner.pk %}{% else %}{% url 'partners:list' slug=active_profile.slug %}{% endif %}">Zpět</a></div>
+</form>
+{% endblock %}

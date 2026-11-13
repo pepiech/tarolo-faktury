@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Upravit profil{% endblock %}
+{% block content %}
+<h1>Upravit profil {{ profile.name }}</h1>
+<p class="muted">Změny se projeví jen na nových dokladech. Vystavené faktury mají vlastní neměnný snímek údajů.</p>
+<form method="post" class="card">
+  {% csrf_token %}{{ form.non_field_errors }}{{ form.version }}
+  <h2>Identita</h2>
+  <div class="grid3">{% for field in form %}{% if field.name in "name legal_form street city zip_code country ico dic vat_payer register_note email phone web is_active" and field.name != "version" %}{% include "_field.html" %}{% endif %}{% endfor %}</div>
+  <h2>Výchozí hodnoty a pravidla</h2>
+  <div class="grid3">{% for field in form %}{% if field.name in "default_due_days default_payment_method default_vat_regime default_bank_account default_series constant_symbol vs_rule rounding_mode vat_calc_method invoice_intro_text invoice_footer_text" %}{% include "_field.html" %}{% endif %}{% endfor %}</div>
+  <div class="actions"><button type="submit">Uložit</button> <a href="{% url 'profiles:settings' slug=profile.slug %}">Zpět</a></div>
+</form>
+{% endblock %}

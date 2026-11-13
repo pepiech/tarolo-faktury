@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Faktury{% endblock %}
+{% block content %}
+<h1>Faktury</h1>
+<form method="get" class="filters">
+  {% for field in filters %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
+  <div><button type="submit">Filtrovat</button> <a href="?">zrušit</a></div>
+</form>
+<div class="actions">
+  {% if perm.invoices_modify and active_profile.is_active %}<a class="button" href="{% url 'invoicing:create' slug=active_profile.slug %}">Nová faktura</a>{% endif %}
+  <a class="button secondary" href="?{{ request.GET.urlencode }}&format=csv">Export CSV</a>
+  <span class="muted">Nalezeno: {{ count }}{% if count > 500 %} (zobrazeno prvních 500){% endif %}</span>
+</div>
+{% include "invoicing/_table.html" %}
+{% endblock %}

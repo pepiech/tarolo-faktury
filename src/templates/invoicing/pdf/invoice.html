@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>{{ doc.title }} {{ doc.number }}</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm 14mm;
+    @bottom-center { content: "Strana " counter(page) " / " counter(pages); font-family: "DejaVu Sans", sans-serif; font-size: 7.5pt; color: #555; } }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", sans-serif; font-size: 8.5pt; color: #111; margin: 0; }
+  .watermark { position: fixed; top: 115mm; left: 0; width: 182mm; text-align: center;
+    transform: rotate(-32deg); font-size: 17pt; white-space: nowrap; font-weight: bold; color: rgba(200, 0, 0, 0.16); z-index: -1; }
+  .testmark { position: fixed; top: -9mm; right: 0; font-size: 7.5pt; font-weight: bold; color: #c25400; }
+  table { border-collapse: collapse; width: 100%; }
+  .grid { display: flex; }
+  .col-left { width: 47%; padding-right: 4mm; }
+  .col-right { width: 53%; }
+  .label { color: #444; font-size: 7.5pt; }
+  .head-title { font-size: 12pt; font-weight: bold; display: flex; justify-content: space-between; white-space: nowrap; gap: 3mm;
+    border-bottom: 1.2pt solid #111; padding-bottom: 1.5mm; }
+  .box { border-bottom: 0.6pt solid #999; padding: 2mm 0; }
+  .party-name { font-weight: bold; font-size: 9.5pt; }
+  .customer { font-size: 10.5pt; line-height: 1.45; margin-top: 2mm; }
+  .kv td { padding: 0.4mm 0; vertical-align: top; }
+  .kv td:first-child { white-space: nowrap; padding-right: 3mm; }
+  .kv td.v { text-align: right; }
+  .kv tr.strong td { font-weight: bold; }
+  .logo { max-height: 18mm; max-width: 55mm; margin-bottom: 2mm; }
+  .items { margin-top: 4mm; }
+  .items th { color: #1b5e9e; font-size: 7.5pt; text-align: right; border-bottom: 0.8pt solid #1b5e9e; padding: 1mm 1mm; }
+  .items th.l, .items td.l { text-align: left; }
+  .items td { text-align: right; padding: 1.2mm 1mm; border-bottom: 0.4pt solid #ddd; vertical-align: top; }
+  .items tr.sum td { font-weight: bold; border-top: 0.8pt solid #111; border-bottom: none; }
+  .bottom { display: flex; margin-top: 5mm; }
+  .recap { width: 50%; padding-right: 6mm; }
+  .recap h3 { color: #1b5e9e; font-size: 9pt; font-weight: normal; margin: 0 0 1mm 0; }
+  .recap th { font-size: 7.5pt; font-weight: normal; text-align: right; border-bottom: 0.6pt solid #111; padding: 0.6mm 1mm; }
+  .recap th.l, .recap td.l { text-align: left; }
+  .recap td { text-align: right; padding: 0.6mm 1mm; }
+  .totals { width: 50%; }
+  .totals td { padding: 0.8mm 0; }
+  .totals td.v { text-align: right; }
+  .totals tr.pay td { font-size: 11pt; font-weight: bold; border-top: 1.2pt solid #111; padding-top: 1.5mm; }
+  .note { margin-top: 5mm; white-space: pre-line; }
+  .regime { margin-top: 3mm; font-weight: bold; }
+  .footer { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-end; }
+  .footer .texts { width: 70%; font-size: 7.5pt; white-space: pre-line; }
+  .qr { text-align: center; font-size: 7pt; color: #333; }
+  .qr img { width: 32mm; height: 32mm; display: block; }
+  .qr-error { width: 45mm; font-size: 7pt; color: #a00; border: 0.6pt solid #a00; padding: 1.5mm; }
+</style>
+</head>
+<body>
+{% if doc.watermark %}<div class="watermark">{{ doc.watermark }}</div>{% endif %}
+{% if doc.test_watermark %}<div class="testmark">TESTOVACÍ PROSTŘEDÍ – NEPLATNÝ DOKLAD</div>{% endif %}
+
+<div class="grid">
+  <div class="col-left">
+    {% if doc.logo_data_uri %}<img class="logo" src="{{ doc.logo_data_uri }}" alt="">{% endif %}
+    <div class="label">Dodavatel:</div>
+    <div class="party-name">{{ doc.issuer.name }}</div>
+    <div>{{ doc.issuer.street }}</div>
+    <div>{{ doc.issuer.zip_code }} {{ doc.issuer.city }}</div>
+    {% if doc.issuer.country and doc.issuer.country != "Česká republika" %}<div>{{ doc.issuer.country }}</div>{% endif %}
+    <div style="margin-top:2mm">IČ: {{ doc.issuer.ico }}{% if doc.issuer.dic %}&nbsp;&nbsp;&nbsp;DIČ: {{ doc.issuer.dic }}{% endif %}</div>
+    {% if not doc.issuer.vat_payer %}<div>Není plátcem DPH.</div>{% endif %}
+    {% if doc.issuer.register_note %}<div class="label">{{ doc.issuer.register_note }}</div>{% endif %}
+    {% if doc.issuer.phone or doc.issuer.email %}<div>{% if doc.issuer.phone %}tel. {{ doc.issuer.phone }}{% endif %}{% if doc.issuer.phone and doc.issuer.email %}, {% endif %}{{ doc.issuer.email }}</div>{% endif %}
+
+    {% if doc.bank %}
+    <table class="kv" style="margin-top:3mm">
+      {% if doc.bank.bank_name %}<tr><td>Peněžní ústav:</td><td class="v">{{ doc.bank.bank_name }}</td></tr>{% endif %}
+      <tr><td>Číslo účtu:</td><td class="v">{{ doc.bank.account_number }}</td></tr>
+      {% if doc.bank.bic %}<tr><td>SWIFT kód:</td><td class="v">{{ doc.bank.bic }}</td></tr>{% endif %}
+      <tr><td>IBAN kód:</td><td class="v">{{ doc.bank.iban }}</td></tr>
+    </table>
+    {% endif %}
+  </div>
+
+  <div class="col-right">
+    <div class="head-title"><span>{{ doc.title }} č.</span><span>{{ doc.number }}</span></div>
+    <table class="kv" style="margin-top:1mm">
+      <tr class="strong"><td>Variabilní symbol:</td><td class="v">{% if doc.variable_symbol %}{{ doc.variable_symbol }}{% elif doc.preview %}přidělí se při vystavení{% endif %}</td></tr>
+      {% if doc.constant_symbol %}<tr><td>Konstantní symbol:</td><td class="v">{{ doc.constant_symbol }}</td></tr>{% endif %}
+      {% if doc.specific_symbol %}<tr><td>Specifický symbol:</td><td class="v">{{ doc.specific_symbol }}</td></tr>{% endif %}
+    </table>
+    <div class="box">
+      <div class="label">Odběratel:{% if doc.partner.ico %}&nbsp;&nbsp;IČ: {{ doc.partner.ico }}{% endif %}{% if doc.partner.dic %}&nbsp;&nbsp;&nbsp;DIČ: {{ doc.partner.dic }}{% endif %}</div>
+      <div class="customer">
+        <strong>{{ doc.partner.name }}</strong><br>
+        {% if doc.partner.street %}{{ doc.partner.street }}<br>{% endif %}
+        {% if doc.partner.city %}{{ doc.partner.zip_code }} {{ doc.partner.city }}<br>{% endif %}
+        {{ doc.partner.country }}
+      </div>
+    </div>
+    <table class="kv" style="margin-top:2mm">
+      <tr><td>Datum vystavení:</td><td class="v">{{ doc.issue_date|cz_date }}</td></tr>
+      <tr><td>Datum uskutečnění zdanitelného plnění:</td><td class="v">{{ doc.taxable_supply_date|cz_date }}</td></tr>
+      <tr class="strong"><td>Datum splatnosti:</td><td class="v">{{ doc.due_date|cz_date }}</td></tr>
+      <tr><td>Forma úhrady:</td><td class="v">{{ doc.payment_method_label }}</td></tr>
+      {% if doc.order_reference %}<tr><td>Objednávka:</td><td class="v">{{ doc.order_reference }}</td></tr>{% endif %}
+    </table>
+  </div>
+</div>
+
+{% if doc.issuer.intro_text %}<div style="margin-top:4mm">{{ doc.issuer.intro_text }}</div>{% endif %}
+<table class="items">
+  <thead>
+    <tr>
+      <th class="l">Název položky</th><th>Počet / MJ</th><th>Cena/MJ</th><th>Sleva %</th>
+      {% if doc.regime.applies_vat %}<th>DPH %</th><th>Cena</th><th>DPH</th>{% endif %}<th>Celkem</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for line in doc.lines %}
+    <tr>
+      <td class="l">{{ line.description }}</td>
+      <td>{{ line.quantity|qty }}{% if line.unit %} {{ line.unit }}{% endif %}</td>
+      <td>{{ line.unit_price|money }}</td>
+      <td>{{ line.discount_percent|money }}</td>
+      {% if doc.regime.applies_vat %}<td>{{ line.vat_rate_percent|percent }}</td><td>{{ line.base|money }}</td><td>{{ line.vat|money }}</td>{% endif %}
+      <td>{{ line.total|money }}</td>
+    </tr>
+  {% endfor %}
+    <tr class="sum">
+      <td class="l" colspan="4" style="text-align:right">Celkem:</td>
+      {% if doc.regime.applies_vat %}<td></td><td>{{ doc.total_base|money }}</td><td>{{ doc.total_vat|money }}</td>{% endif %}
+      <td>{{ doc.total_before_rounding|money }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="bottom">
+  <div class="recap">
+    {% if doc.regime.applies_vat %}
+    <h3>Rekapitulace DPH v Kč</h3>
+    <table>
+      <tr><th class="l">Sazba</th><th>Základ</th><th>DPH</th><th>Celkem s DPH</th></tr>
+      {% for row in doc.vat_rows %}
+      <tr><td class="l">{{ row.rate_percent|percent }} %</td><td>{{ row.base|money }}</td><td>{{ row.vat|money }}</td><td>{{ row.total|money }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    {% if doc.regime.invoice_text %}<div class="regime">{{ doc.regime.invoice_text }}</div>{% endif %}
+  </div>
+  <div class="totals">
+    <table>
+      {% if doc.regime.applies_vat %}
+      <tr><td>Základ daně:</td><td class="v">{{ doc.total_base|money }}</td></tr>
+      <tr><td>DPH:</td><td class="v">{{ doc.total_vat|money }}</td></tr>
+      {% endif %}
+      <tr><td>Zaokrouhlení:</td><td class="v">{{ doc.rounding|money }}</td></tr>
+      <tr class="pay"><td>Zbývá uhradit v Kč</td><td class="v">{{ doc.total|money }}</td></tr>
+    </table>
+  </div>
+</div>
+
+{% if doc.public_note %}<div class="note">{{ doc.public_note }}</div>{% endif %}
+
+<div class="footer">
+  <div class="texts">{% if doc.issued_by.name %}Fakturu vystavil/a: {{ doc.issued_by.name }}{% if doc.issued_by.email %}, {{ doc.issued_by.email }}{% endif %}
+{% endif %}{{ doc.issuer.footer_text }}</div>
+  {% if doc.qr %}
+    {% if doc.qr.data_uri %}
+      <div class="qr"><img src="{{ doc.qr.data_uri }}" alt="QR Platba">QR platba telefonem</div>
+    {% else %}
+      <div class="qr-error">QR Platbu nelze vytvořit: {{ doc.qr.error }}</div>
+    {% endif %}
+  {% endif %}
+</div>
+</body>
+</html>

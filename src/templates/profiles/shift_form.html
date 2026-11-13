@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Posunout číselnou řadu{% endblock %}
+{% block content %}
+<h1>Posunout další číslo řady {{ series.name }}</h1>
+<p class="muted">Lze jen zvýšit na dosud nepoužitou hodnotu. Změna se zapíše do auditu i s důvodem.</p>
+<form method="post" class="card">
+  {% csrf_token %}{{ form.non_field_errors }}
+  <div class="grid3">{% for field in form %}{% include "_field.html" %}{% endfor %}</div>
+  <div class="actions"><button type="submit">Posunout</button> <a href="{% url 'profiles:settings' slug=profile.slug %}">Zpět</a></div>
+</form>
+{% endblock %}

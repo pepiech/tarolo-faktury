@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Logo{% endblock %}
+{% block content %}
+<h1>Logo profilu {{ profile.name }}</h1>
+<form method="post" enctype="multipart/form-data" class="card">
+  {% csrf_token %}{{ form.non_field_errors }}
+  {% for field in form %}{% include "_field.html" %}{% endfor %}
+  <div class="actions"><button type="submit">Nahrát</button> <a href="{% url 'profiles:settings' slug=profile.slug %}">Zpět</a></div>
+</form>
+{% endblock %}

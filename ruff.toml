@@ -4,4 +4,4 @@ extend-exclude = ["**/migrations/*.py"]
 
 [lint]
 select = ["E", "F", "W", "I", "B", "UP", "DJ"]
-ignore = ["DJ001"]
+ignore = ["DJ001", "DJ008", "E501"]

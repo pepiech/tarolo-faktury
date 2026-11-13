@@ -1,0 +1,5 @@
+<span class="badge badge-{{ inv.status }}">{{ inv.get_status_display }}</span>
+{% if inv.status != "draft" and inv.status != "cancelled" %}
+  {% if inv.is_overdue %}<span class="badge badge-overdue">po splatnosti</span>{% endif %}
+  <span class="badge badge-{{ inv.payment_state }}">{% if inv.payment_state == "unpaid" %}neuhrazeno{% elif inv.payment_state == "partial" %}částečně uhrazeno{% elif inv.payment_state == "paid" %}uhrazeno{% else %}přeplaceno{% endif %}</span>
+{% endif %}

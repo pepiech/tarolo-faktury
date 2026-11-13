@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{% if invoice %}Upravit návrh{% else %}Nová faktura{% endif %}{% endblock %}
+{% block content %}
+<h1>{% if invoice %}Upravit návrh {{ invoice.display_number }}{% else %}Nová faktura{% endif %}</h1>
+<p class="muted">Vystavitel: <strong>{{ active_profile.name }}</strong>, IČO {{ active_profile.ico }}. Číslo se přidělí až při vystavení.</p>
+{% if preview_error %}<ul class="messages"><li class="msg-error">{{ preview_error }}</li></ul>{% endif %}
+<form method="post" id="invoice-form" class="card" hx-post="{% url 'invoicing:totals' slug=active_profile.slug %}" hx-trigger="input delay:600ms, change" hx-target="#totals" hx-swap="innerHTML">
+  {% csrf_token %}
+  {{ form.non_field_errors }}{{ form.version }}
+  <div class="grid3">
+    {% for field in form %}{% if field.name not in "version public_note internal_note" %}{% include "_field.html" %}{% endif %}{% endfor %}
+  </div>
+
+  <h2>Položky</h2>
+  {{ formset.management_form }}
+  {{ formset.non_form_errors }}
+  <table class="data lines">
+    <thead><tr><th class="c-desc">Popis plnění</th><th class="c-qty">Množství</th><th class="c-unit">MJ</th><th class="c-price">Cena/MJ bez DPH</th><th class="c-disc">Sleva %</th><th class="c-vat">DPH %</th><th></th></tr></thead>
+    <tbody id="lines-body">
+    {% for f in formset %}
+      <tr class="line-row">
+        <td>{{ f.description }}{{ f.description.errors }}{% for h in f.hidden_fields %}{{ h }}{% endfor %}</td>
+        <td>{{ f.quantity }}{{ f.quantity.errors }}</td><td>{{ f.unit }}</td>
+        <td>{{ f.unit_price }}{{ f.unit_price.errors }}</td><td>{{ f.discount_percent }}{{ f.discount_percent.errors }}</td>
+        <td>{{ f.vat_rate_percent }}</td>
+        <td><span style="display:none">{{ f.DELETE }}</span><button type="button" class="small secondary remove-line" title="Odebrat položku">×</button></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <template id="line-template">
+    <tr class="line-row">
+      <td>{{ formset.empty_form.description }}</td><td>{{ formset.empty_form.quantity }}</td><td>{{ formset.empty_form.unit }}</td>
+      <td>{{ formset.empty_form.unit_price }}</td><td>{{ formset.empty_form.discount_percent }}</td><td>{{ formset.empty_form.vat_rate_percent }}</td>
+      <td><span style="display:none">{{ formset.empty_form.DELETE }}</span><button type="button" class="small secondary remove-line">×</button></td>
+    </tr>
+  </template>
+  <div class="actions"><button type="button" class="secondary small" id="add-line">+ Přidat položku</button></div>
+
+  <div class="grid2">
+    <div>{% include "_field.html" with field=form.public_note %}{% include "_field.html" with field=form.internal_note %}</div>
+    <div class="totals-box card" id="totals">{% include "invoicing/_totals.html" with invalid=True %}</div>
+  </div>
+
+  <div class="actions">
+    <button type="submit">Uložit návrh</button>
+    <button type="submit" class="secondary" formaction="{% url 'invoicing:preview' slug=active_profile.slug %}" formtarget="_blank" data-testid="preview-button">Náhled PDF (bez uložení)</button>
+    <a href="{% if invoice %}{% url 'invoicing:detail' slug=active_profile.slug pk=invoice.pk %}{% else %}{% url 'invoicing:list' slug=active_profile.slug %}{% endif %}">Zrušit</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var body = document.getElementById("lines-body");
+  var total = document.getElementById("id_lines-TOTAL_FORMS");
+  var tpl = document.getElementById("line-template");
+  var form = document.getElementById("invoice-form");
+  function refresh() { if (window.htmx) { htmx.trigger(form, "change"); } }
+  document.getElementById("add-line").addEventListener("click", function () {
+    var index = parseInt(total.value, 10);
+    var html = tpl.innerHTML.replace(/__prefix__/g, index);
+    body.insertAdjacentHTML("beforeend", html);
+    total.value = index + 1;
+    var row = body.lastElementChild;
+    var first = body.querySelector(".line-row select");
+    var sel = row.querySelector("select");
+    if (first && sel) { sel.value = first.value; }
+    var q = row.querySelector("input[name$='-quantity']"); if (q && !q.value) { q.value = "1"; }
+    var d = row.querySelector("input[name$='-discount_percent']"); if (d && !d.value) { d.value = "0"; }
+    row.querySelector("input").focus();
+  });
+  body.addEventListener("click", function (e) {
+    if (!e.target.classList.contains("remove-line")) return;
+    var row = e.target.closest("tr");
+    var del = row.querySelector("input[name$='-DELETE']");
+    if (del) { del.checked = true; }
+    row.style.display = "none";
+    refresh();
+  });
+  document.addEventListener("DOMContentLoaded", refresh);
+  window.addEventListener("load", refresh);
+})();
+</script>
+{% endblock %}

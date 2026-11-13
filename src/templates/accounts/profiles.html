@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Fakturační profily{% endblock %}
+{% block content %}
+<h1>Správa</h1>
+{% include "accounts/_nav.html" %}
+<div class="actions"><a class="button" href="{% url 'accounts:profile_create' %}">Nový profil</a></div>
+<table class="data">
+  <thead><tr><th>Název</th><th>IČO</th><th>DIČ</th><th>Plátce DPH</th><th>Stav</th><th></th></tr></thead>
+  <tbody>
+  {% for p in profiles %}
+  <tr>
+    <td><a href="{% url 'reports:dashboard' slug=p.slug %}">{{ p.name }}</a></td>
+    <td>{{ p.ico }}</td><td>{{ p.dic }}</td><td>{{ p.vat_payer|yesno:"ano,ne" }}</td>
+    <td>{% if p.is_active %}aktivní{% else %}<span class="badge badge-muted">deaktivovaný</span>{% endif %}</td>
+    <td><a href="{% url 'profiles:settings' slug=p.slug %}">Nastavení</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

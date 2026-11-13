@@ -1,0 +1,61 @@
+{% load static %}<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if is_test_environment %}[TEST] {% endif %}{% block title %}Faktury{% endblock %}{% if active_profile %} – {{ active_profile.name }}{% endif %}</title>
+  <link rel="stylesheet" href="{% static 'core/site.css' %}">
+  <script src="{% static 'core/htmx.min.js' %}" defer></script>
+</head>
+<body class="{% if is_test_environment %}env-test{% endif %}">
+{% if is_test_environment %}
+  <div class="env-banner" role="status">TESTOVACÍ PROSTŘEDÍ ({{ app_environment }}) – data nejsou ostrá</div>
+{% endif %}
+<header class="topbar">
+  <a class="brand" href="{% url 'home' %}">Faktury</a>
+  {% if active_profile %}
+    <div class="active-profile" data-testid="active-profile">
+      <span class="ap-name">{{ active_profile.name }}</span>
+      <span class="ap-ico">IČO {{ active_profile.ico }}</span>
+      {% if not active_profile.is_active %}<span class="badge badge-muted">deaktivovaný</span>{% endif %}
+    </div>
+  {% endif %}
+  {% if current_user %}
+  <nav class="profile-switch">
+    <details>
+      <summary>Profil</summary>
+      <ul>
+        {% for p in nav_profiles %}<li><a href="{% url 'reports:dashboard' slug=p.slug %}">{{ p.name }}{% if not p.is_active %} (deaktivovaný){% endif %}</a></li>
+        {% empty %}<li>Nemáte přidělený žádný profil.</li>{% endfor %}
+      </ul>
+    </details>
+  </nav>
+  <div class="spacer"></div>
+  {% if current_user.is_admin %}<a href="{% url 'accounts:users' %}">Správa</a>{% endif %}
+  <span class="user">{{ current_user.name }}</span>
+  {% endif %}
+</header>
+{% if active_profile and perm %}
+<nav class="subnav">
+  <a href="{% url 'reports:dashboard' slug=active_profile.slug %}" class="{% if request.resolver_match.app_name == 'reports' %}on{% endif %}">Přehled</a>
+  {% if perm.invoices_view %}<a href="{% url 'invoicing:list' slug=active_profile.slug %}" class="{% if request.resolver_match.app_name == 'invoicing' %}on{% endif %}">Faktury</a>{% endif %}
+  <a href="{% url 'partners:list' slug=active_profile.slug %}" class="{% if request.resolver_match.app_name == 'partners' %}on{% endif %}">Partneři</a>
+  {% if perm.admin %}<a href="{% url 'profiles:settings' slug=active_profile.slug %}" class="{% if request.resolver_match.app_name == 'profiles' %}on{% endif %}">Nastavení profilu</a>{% endif %}
+</nav>
+{% endif %}
+<main>
+  {% if messages %}
+    <ul class="messages">{% for m in messages %}<li class="msg-{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="pagefoot">Faktury · {{ app_environment }}</footer>
+<script>
+document.addEventListener("htmx:configRequest", function (e) {
+  var t = document.querySelector("input[name=csrfmiddlewaretoken]");
+  if (t) { e.detail.headers["X-CSRFToken"] = t.value; }
+});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

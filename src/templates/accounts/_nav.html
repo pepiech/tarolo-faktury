@@ -1,0 +1,6 @@
+<div class="tabs">
+  <a href="{% url 'accounts:users' %}" class="{% if request.resolver_match.url_name in 'users,user_create,user_edit' %}on{% endif %}">Uživatelé</a>
+  <a href="{% url 'accounts:profiles' %}" class="{% if request.resolver_match.url_name in 'profiles,profile_create' %}on{% endif %}">Fakturační profily</a>
+  <a href="{% url 'accounts:global' %}">Souhrn profilů</a>
+  <a href="{% url 'accounts:audit' %}" class="{% if request.resolver_match.url_name == 'audit' %}on{% endif %}">Audit</a>
+</div>

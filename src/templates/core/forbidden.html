@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Přístup odepřen{% endblock %}
+{% block content %}
+<h1>Přístup odepřen</h1>
+<p>{{ reason }}</p>
+{% if email %}<p class="muted">Přihlášený e-mail: {{ email }}</p>{% endif %}
+<p>Pokud přístup potřebujete, požádejte správce aplikace o založení účtu.</p>
+{% endblock %}

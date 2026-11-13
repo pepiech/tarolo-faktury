@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Uživatelé{% endblock %}
+{% block content %}
+<h1>Správa</h1>
+{% include "accounts/_nav.html" %}
+<div class="actions"><a class="button" href="{% url 'accounts:user_create' %}">Nový uživatel</a></div>
+<table class="data">
+  <thead><tr><th>Jméno</th><th>E-mail</th><th>Stav</th><th>Oprávnění</th><th>Poslední přihlášení</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td><a href="{% url 'accounts:user_edit' pk=u.pk %}">{{ u.name }}</a></td>
+      <td>{{ u.email }}</td>
+      <td>{% if u.is_active %}aktivní{% else %}<span class="badge badge-muted">deaktivovaný</span>{% endif %}</td>
+      <td>{% if u.is_admin %}<span class="badge badge-issued">admin</span>{% endif %}
+        {% for m in u.memberships.all %}<div><strong>{{ m.profile.name }}:</strong> {{ m.perms|join:", " }}</div>{% endfor %}</td>
+      <td>{{ u.last_login_at|cz_date }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

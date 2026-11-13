@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Audit{% endblock %}
+{% block content %}
+<h1>Správa</h1>
+{% include "accounts/_nav.html" %}
+<form method="get" class="filters">
+  <div><label>Profil</label><select name="profil"><option value="">— všechny —</option>{% for p in profiles %}<option value="{{ p.pk }}" {% if selected_profile == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+  <div><label>Akce začíná</label><input type="text" name="akce" value="{{ action }}" placeholder="invoice."></div>
+  <div><button type="submit">Filtrovat</button></div>
+</form>
+{% include "audit/_events.html" with events=page.object_list %}
+<div class="actions">{% if page.has_previous %}<a href="?strana={{ page.previous_page_number }}&profil={{ selected_profile|default:'' }}&akce={{ action }}">« novější</a>{% endif %} <span class="muted">strana {{ page.number }} / {{ page.paginator.num_pages }}</span> {% if page.has_next %}<a href="?strana={{ page.next_page_number }}&profil={{ selected_profile|default:'' }}&akce={{ action }}">starší »</a>{% endif %}</div>
+{% endblock %}

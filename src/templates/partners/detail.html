@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ partner.name }}{% endblock %}
+{% block content %}
+<h1>{{ partner.name }}{% if not partner.is_active %} <span class="badge badge-muted">neaktivní</span>{% endif %}</h1>
+<div class="actions">
+  {% if perm.partners_modify %}<a class="button secondary" href="{% url 'partners:edit' slug=active_profile.slug pk=partner.pk %}">Upravit</a>{% endif %}
+  {% if perm.invoices_modify and partner.is_active %}<a class="button" href="{% url 'invoicing:create' slug=active_profile.slug %}?partner={{ partner.pk }}">Nová faktura</a>{% endif %}
+</div>
+<div class="card">
+  <dl class="kv">
+    <dt>IČO / DIČ</dt><dd>{{ partner.ico|default:"—" }} / {{ partner.dic|default:"—" }} {% if partner.vat_payer %}· plátce DPH{% endif %}</dd>
+    <dt>Adresa</dt><dd>{{ partner.address_lines|join:", " }}</dd>
+    <dt>E-mail pro fakturaci</dt><dd>{{ partner.billing_email|default:"—" }}</dd>
+    <dt>Kontakt</dt><dd>{{ partner.contact_person }} {{ partner.phone }}</dd>
+    <dt>Splatnost / úhrada</dt><dd>{{ partner.due_days_override|default_if_none:"dle profilu" }}{% if partner.due_days_override is not None %} dnů{% endif %} · {{ partner.get_payment_method_override_display|default:"dle profilu" }}</dd>
+    <dt>Interní poznámka</dt><dd>{{ partner.internal_note|linebreaksbr|default:"—" }}</dd>
+  </dl>
+</div>
+<h2>Faktury partnera</h2>
+{% include "invoicing/_table.html" with invoices=invoices %}
+{% if copy_form %}
+<h2>Kopírovat do jiného profilu</h2>
+<form method="post" action="{% url 'partners:copy' slug=active_profile.slug pk=partner.pk %}" class="card">
+  {% csrf_token %}<div class="grid3">{% for field in copy_form %}{% include "_field.html" %}{% endfor %}<div class="field"><label>&nbsp;</label><button type="submit" class="secondary">Kopírovat</button></div></div>
+</form>
+{% endif %}
+{% endblock %}

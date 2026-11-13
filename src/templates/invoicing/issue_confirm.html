@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Vystavit fakturu{% endblock %}
+{% block content %}
+<h1>Vystavit fakturu</h1>
+<div class="recap" data-testid="issue-recap">
+  <dl>
+    <dt>Vystavitel</dt><dd>{{ active_profile.name }}</dd>
+    <dt>IČO</dt><dd>{{ active_profile.ico }}{% if active_profile.dic %} · DIČ {{ active_profile.dic }}{% endif %}</dd>
+    <dt>Bankovní účet</dt><dd>{% if invoice.bank_account %}{{ invoice.bank_account.account_number }} · {{ invoice.bank_account.iban }}{% else %}—{% endif %}</dd>
+    <dt>Číselná řada</dt><dd>{{ invoice.series }}</dd>
+    <dt>Očekávané číslo</dt><dd>{{ expected_number }} <span class="muted" style="font-weight:normal">(skutečné se přidělí při vystavení)</span></dd>
+    <dt>Odběratel</dt><dd>{{ invoice.partner.name }}{% if invoice.partner.ico %} · IČO {{ invoice.partner.ico }}{% endif %}</dd>
+    <dt>Splatnost</dt><dd>{{ invoice.due_date|cz_date }}</dd>
+    <dt>Celkem k úhradě</dt><dd>{{ invoice.total|czk }}</dd>
+  </dl>
+</div>
+{% if problems %}
+  <ul class="messages">{% for p in problems %}<li class="msg-error">{{ p }}</li>{% endfor %}</ul>
+  <a href="{% url 'invoicing:detail' slug=active_profile.slug pk=invoice.pk %}">Zpět na návrh</a>
+{% else %}
+  <p>Po vystavení už fakturu nelze upravit. Opravu řeší storno.</p>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="version" value="{{ invoice.version }}">
+    <div class="actions">
+      <button type="submit" data-testid="confirm-issue">Vystavit fakturu</button>
+      <a class="button secondary" href="{% url 'invoicing:preview_draft' slug=active_profile.slug pk=invoice.pk %}" target="_blank">Náhled PDF</a>
+      <a href="{% url 'invoicing:detail' slug=active_profile.slug pk=invoice.pk %}">Zpět</a>
+    </div>
+  </form>
+{% endif %}
+{% endblock %}

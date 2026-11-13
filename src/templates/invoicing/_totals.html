@@ -1,0 +1,14 @@
+{% if invalid %}
+  <p class="muted">Součty se zobrazí po vyplnění povinných údajů.</p>
+{% else %}
+<table>
+  {% if applies_vat %}{% for row in t.vat_rows %}
+  <tr><td>Základ {{ row.rate_percent|percent }} %</td><td class="num">{{ row.base|czk }}</td></tr>
+  <tr><td>DPH {{ row.rate_percent|percent }} %</td><td class="num">{{ row.vat|czk }}</td></tr>
+  {% endfor %}{% else %}
+  <tr><td>Celkem bez DPH</td><td class="num">{{ t.total_base|czk }}</td></tr>
+  {% endif %}
+  {% if t.rounding %}<tr><td>Zaokrouhlení</td><td class="num">{{ t.rounding|czk }}</td></tr>{% endif %}
+  <tr class="total"><td>Celkem k úhradě</td><td class="num" data-testid="total">{{ t.total|czk }}</td></tr>
+</table>
+{% endif %}

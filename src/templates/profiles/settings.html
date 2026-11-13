@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Nastavení profilu{% endblock %}
+{% block content %}
+<h1>Nastavení profilu {{ profile.name }}</h1>
+
+<div class="card">
+  <div class="actions" style="margin-top:0"><strong style="flex:1">Identita a výchozí hodnoty</strong><a class="button small" href="{% url 'profiles:edit' slug=profile.slug %}">Upravit</a></div>
+  <dl class="kv">
+    <dt>Obchodní firma / jméno</dt><dd>{{ profile.name }} {% if profile.legal_form %}<span class="muted">({{ profile.legal_form }})</span>{% endif %}</dd>
+    <dt>Sídlo</dt><dd>{{ profile.street }}, {{ profile.zip_code }} {{ profile.city }}, {{ profile.country }}</dd>
+    <dt>IČO / DIČ</dt><dd>{{ profile.ico }} / {{ profile.dic|default:"—" }} · {% if profile.vat_payer %}plátce DPH{% else %}neplátce DPH{% endif %}</dd>
+    <dt>Zápis v rejstříku</dt><dd>{{ profile.register_note|default:"—" }}</dd>
+    <dt>Kontakt</dt><dd>{{ profile.email|default:"" }} {{ profile.phone|default:"" }} {{ profile.web|default:"" }}</dd>
+    <dt>Stav</dt><dd>{% if profile.is_active %}aktivní{% else %}deaktivovaný – nelze vystavovat nové doklady{% endif %}</dd>
+    <dt>Výchozí splatnost</dt><dd>{{ profile.default_due_days }} dnů · {{ profile.get_default_payment_method_display }}</dd>
+    <dt>Výchozí účet / řada / režim</dt><dd>{{ profile.default_bank_account|default:"—" }} · {{ profile.default_series|default:"—" }} · {{ profile.default_vat_regime|default:"—" }}</dd>
+    <dt>Variabilní / konstantní symbol</dt><dd>{{ profile.get_vs_rule_display }} · KS {{ profile.constant_symbol|default:"—" }}</dd>
+    <dt>Výpočet DPH / zaokrouhlení</dt><dd>{{ profile.get_vat_calc_method_display }} · {{ profile.get_rounding_mode_display }}</dd>
+    <dt>Texty na faktuře</dt><dd>{{ profile.invoice_intro_text|default:"—" }}<br><span class="muted">{{ profile.invoice_footer_text|linebreaksbr }}</span></dd>
+  </dl>
+</div>
+
+<div class="card">
+  <div class="actions" style="margin-top:0"><strong style="flex:1">Logo</strong><a class="button small" href="{% url 'profiles:logo' slug=profile.slug %}">Nahrát</a></div>
+  {% if profile.logo %}<img src="{% url 'profiles:logo_file' slug=profile.slug %}" alt="logo" style="max-height:60px">{% else %}<span class="muted">Bez loga.</span>{% endif %}
+</div>
+
+<div class="card">
+  <div class="actions" style="margin-top:0"><strong style="flex:1">Bankovní účty (pro faktury a QR Platbu)</strong><a class="button small" href="{% url 'profiles:item_create' slug=profile.slug kind='ucty' %}">Přidat účet</a></div>
+  <table class="data">
+    <thead><tr><th>Označení</th><th>Číslo účtu</th><th>IBAN</th><th>BIC</th><th>Banka</th><th>Stav</th></tr></thead>
+    <tbody>{% for a in accounts %}<tr><td><a href="{% url 'profiles:item_edit' slug=profile.slug kind='ucty' pk=a.pk %}">{{ a.label }}</a></td><td>{{ a.account_number }}</td><td>{{ a.iban }}</td><td>{{ a.bic }}</td><td>{{ a.bank_name }}</td><td>{{ a.is_active|yesno:"aktivní,neaktivní" }}</td></tr>
+    {% empty %}<tr><td colspan="6"><strong class="muted">Profil nemá bankovní účet – bez něj nelze vystavit fakturu s úhradou převodem.</strong></td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+
+<div class="grid2">
+<div class="card">
+  <div class="actions" style="margin-top:0"><strong style="flex:1">Sazby DPH</strong><a class="button small" href="{% url 'profiles:item_create' slug=profile.slug kind='sazby' %}">Přidat</a></div>
+  <table class="data"><tbody>{% for r in rates %}<tr><td><a href="{% url 'profiles:item_edit' slug=profile.slug kind='sazby' pk=r.pk %}">{{ r.label }}</a></td><td class="num">{{ r.rate_percent|percent }} %</td><td>{{ r.is_active|yesno:"aktivní,neaktivní" }}</td></tr>{% endfor %}</tbody></table>
+</div>
+<div class="card">
+  <div class="actions" style="margin-top:0"><strong style="flex:1">Režimy DPH</strong><a class="button small" href="{% url 'profiles:item_create' slug=profile.slug kind='rezimy' %}">Přidat</a></div>
+  <table class="data"><tbody>{% for r in regimes %}<tr><td><a href="{% url 'profiles:item_edit' slug=profile.slug kind='rezimy' pk=r.pk %}">{{ r.label }}</a></td><td>{{ r.applies_vat|yesno:"počítá DPH,bez DPH" }}</td><td class="muted">{{ r.invoice_text }}</td></tr>{% endfor %}</tbody></table>
+</div>
+</div>
+
+<div class="card">
+  <div class="actions" style="margin-top:0"><strong style="flex:1">Číselné řady</strong><a class="button small" href="{% url 'profiles:item_create' slug=profile.slug kind='rady' %}">Přidat řadu</a></div>
+  <table class="data">
+    <thead><tr><th>Název</th><th>Formát</th><th>Start</th><th>Příklad</th><th>Čítače</th><th></th></tr></thead>
+    <tbody>{% for s in series %}<tr>
+      <td><a href="{% url 'profiles:item_edit' slug=profile.slug kind='rady' pk=s.pk %}">{{ s.name }}</a>{% if not s.is_active %} <span class="badge badge-muted">neaktivní</span>{% endif %}</td>
+      <td><code>{{ s.format }}</code>{% if s.min_width %} <span class="muted">(min. {{ s.min_width }} číslic)</span>{% endif %}</td>
+      <td>{{ s.start_value }}</td><td>{{ s.example }}</td>
+      <td>{% for c in s.counters_list %}<div>{{ c.period|default:"průběžně" }}: poslední {{ c.last_value|default:"—" }}</div>{% empty %}<span class="muted">zatím nepoužita</span>{% endfor %}</td>
+      <td>{% if s.used %}<a href="{% url 'profiles:series_shift' slug=profile.slug pk=s.pk %}">Posunout další číslo</a>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="actions" style="margin-top:0"><strong style="flex:1">Upomínková pravidla</strong><a class="button small" href="{% url 'profiles:item_create' slug=profile.slug kind='upominky' %}">Přidat</a></div>
+  <table class="data"><tbody>{% for r in rules %}<tr><td><a href="{% url 'profiles:item_edit' slug=profile.slug kind='upominky' pk=r.pk %}">{{ r.label }}</a></td><td>{{ r.days_after_due }} dnů po splatnosti</td><td><form method="post" action="{% url 'profiles:item_delete' slug=profile.slug kind='upominky' pk=r.pk %}" class="inline-form">{% csrf_token %}<button class="small secondary" type="submit">Odstranit</button></form></td></tr>
+  {% empty %}<tr><td class="muted">Bez pravidel.</td></tr>{% endfor %}</tbody></table>
+</div>
+{% endblock %}

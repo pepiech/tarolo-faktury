@@ -1,0 +1,5 @@
+<form method="get" class="actions"><label style="display:inline">Rok vystavení:</label>
+  <select name="rok" onchange="this.form.submit()" style="width:auto">
+    {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    <option value="vse" {% if year is None %}selected{% endif %}>všechny roky</option>
+  </select></form>

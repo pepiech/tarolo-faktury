@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Souhrn profilů{% endblock %}
+{% block content %}
+<h1>Správa</h1>
+{% include "accounts/_nav.html" %}
+{% include "reports/_year.html" %}
+<p class="muted">Profily jsou zobrazeny vedle sebe. Částky různých vystavitelů se záměrně nesčítají.</p>
+<table class="data" data-testid="global-summary">
+  <thead><tr><th>Profil</th><th class="num">Faktur</th><th class="num">Vystaveno</th><th class="num">Uhrazeno</th><th class="num">Zbývá</th><th class="num">Po splatnosti</th><th class="num">Návrhy</th></tr></thead>
+  <tbody>{% for r in rows %}<tr><td><a href="{% url 'reports:dashboard' slug=r.profile.slug %}">{{ r.profile.name }}</a> <span class="muted">IČO {{ r.profile.ico }}</span></td>
+    <td class="num">{{ r.s.count }}</td><td class="num">{{ r.s.issued|czk }}</td><td class="num">{{ r.s.paid|czk }}</td><td class="num">{{ r.s.remaining|czk }}</td><td class="num">{{ r.s.overdue|czk }}</td><td class="num">{{ r.s.drafts }}</td></tr>{% endfor %}</tbody>
+</table>
+{% endblock %}

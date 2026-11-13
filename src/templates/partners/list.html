@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Partneři{% endblock %}
+{% block content %}
+<h1>Partneři</h1>
+<form method="get" class="filters">
+  <div><label>Hledat</label><input type="search" name="q" value="{{ q }}" placeholder="název, IČO, DIČ, obec"></div>
+  <div><label><input type="checkbox" name="neaktivni" value="1" {% if show_inactive %}checked{% endif %}> i neaktivní</label></div>
+  <div><button type="submit">Hledat</button></div>
+</form>
+<div class="actions">
+  {% if perm.partners_modify %}<a class="button" href="{% url 'partners:create' slug=active_profile.slug %}">Nový partner</a>{% endif %}
+  <a class="button secondary" href="?{{ request.GET.urlencode }}&format=csv">Export CSV</a>
+</div>
+<table class="data">
+  <thead><tr><th>Název</th><th>IČO</th><th>DIČ</th><th>Sídlo</th><th>E-mail</th><th class="num">Faktur</th></tr></thead>
+  <tbody>
+  {% for p in partners %}
+    <tr><td><a href="{% url 'partners:detail' slug=active_profile.slug pk=p.pk %}">{{ p.name }}</a>{% if not p.is_active %} <span class="badge badge-muted">neaktivní</span>{% endif %}</td>
+      <td>{{ p.ico }}</td><td>{{ p.dic }}</td><td>{{ p.city }}</td><td>{{ p.billing_email }}</td><td class="num">{{ p.invoice_count }}</td></tr>
+  {% empty %}<tr><td colspan="6" class="muted">Žádní partneři.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}
