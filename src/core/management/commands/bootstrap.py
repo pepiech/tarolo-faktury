@@ -6,7 +6,7 @@ from accounts.permissions import Actor
 from accounts.services import ensure_admins
 from audit import services as audit
 from profiles.models import BillingProfile
-from profiles.services import seed_defaults
+from profiles.services import fill_missing_default_account, seed_defaults
 
 INITIAL_PROFILES = [
     # Identifikační údaje ověřené v ARES 13. 11. 2026 (zadání kap. 1.1).
@@ -41,4 +41,9 @@ class Command(BaseCommand):
                 audit.record(actor, "profile.bootstrap", profile=profile, obj=profile,
                              after=audit.snapshot(profile))
                 self.stdout.write(f"bootstrap: založen profil {profile.name}")
+        for profile in BillingProfile.objects.filter(default_bank_account__isnull=True):
+            if fill_missing_default_account(profile):
+                audit.record(actor, "profile.default_account", profile=profile, obj=profile,
+                             after={"default_bank_account": profile.bank_accounts.get(is_active=True).pk})
+                self.stdout.write(f"bootstrap: výchozí účet doplněn u profilu {profile.name}")
         self.stdout.write("bootstrap: hotovo")

@@ -102,6 +102,10 @@ def item_edit(request, profile, kind, pk=None):
                     if pk and hasattr(obj, "version"):
                         obj.version += 1
                     obj.save()
+                    if model is BankAccount and obj.is_active and profile.default_bank_account_id is None:
+                        # První aktivní účet se stane výchozím, aby se nemusel vybírat u každé faktury.
+                        BillingProfile.objects.filter(pk=profile.pk).update(default_bank_account=obj)
+                        messages.info(request, "Účet byl nastaven jako výchozí pro nové faktury.")
                     after = audit.snapshot(obj)
                     b, a = audit.diff(before, after) if pk else (None, after)
                     audit.record(actor, f"{model._meta.model_name}.{'update' if pk else 'create'}",

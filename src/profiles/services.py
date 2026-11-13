@@ -103,3 +103,14 @@ def shift_next_number(actor, series, period, next_value, reason):
         actor, "series.shift", profile=series.profile, obj=series,
         before=before, after={"period": period, "next": next_value}, note=reason,
     )
+
+
+def fill_missing_default_account(profile):
+    """Má-li profil jediný aktivní účet a žádný výchozí, nastaví ho jako výchozí."""
+    if profile.default_bank_account_id:
+        return False
+    accounts = list(profile.bank_accounts.filter(is_active=True)[:2])
+    if len(accounts) != 1:
+        return False
+    BillingProfile.objects.filter(pk=profile.pk).update(default_bank_account=accounts[0])
+    return True

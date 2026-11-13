@@ -280,3 +280,29 @@ def test_series_shift_only_upwards(admin, world, profile):
     assert c.post(url, {"year": 2026, "next_value": 50, "reason": "navázání na Premier"}).status_code == 302
     inv = services.create_draft(Actor(user=admin), profile, header_for(profile, world["partner"]), [line()])
     assert services.issue(Actor(user=admin), inv, inv.version).number == "2650"
+
+
+def test_first_bank_account_becomes_default(admin, make_profile):
+    from profiles.models import BankAccount, BillingProfile
+
+    p = BillingProfile.objects.create(slug="novy", name="Nový", street="a", city="b", zip_code="1",
+                                      ico="11111111")
+    c = client_for(admin)
+    c.post(reverse("profiles:item_create", kwargs={"slug": p.slug, "kind": "ucty"}), {
+        "label": "Hlavní", "account_number": "2201090240/6210", "iban": "CZ0762106701002201090240",
+        "bic": "BREXCZPP", "bank_name": "mBank", "is_active": "on"})
+    p.refresh_from_db()
+    assert p.default_bank_account == BankAccount.objects.get(profile=p)
+
+
+def test_bootstrap_fills_missing_default_account(make_profile, settings):
+    from django.core.management import call_command
+
+    from profiles.models import BillingProfile
+
+    p = make_profile("x", "22222222")
+    BillingProfile.objects.filter(pk=p.pk).update(default_bank_account=None)
+    settings.BOOTSTRAP_ADMIN_EMAILS = []
+    call_command("bootstrap")
+    p.refresh_from_db()
+    assert p.default_bank_account is not None
