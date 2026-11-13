@@ -31,7 +31,11 @@ Pravidla:
   (cancel_invoice) smíš až po výslovném pokynu uživatele a ukázání rekapitulace, s confirm=true.
 - Ceny položek jsou bez DPH. U dotazu na zaplacení uveď profil, partnera, číslo a datum faktury, částku,
   zbývající částku, splatnost, stav úhrady a čas/zdroj poslední platby.
-- Ke každému zápisu vygeneruj nový client_request_id; při opakování téhož požadavku použij stejný."""
+- Ke každému zápisu vygeneruj nový client_request_id; při opakování téhož požadavku použij stejný.
+- Na počty a součty použij total_count/totals_by_profile ze search_invoices, nástroj invoice_stats
+  (seskupení podle partnera, měsíce, stavu) nebo list_payments – neprocházej ručně stránky.
+- Relativní období („tento týden“, „minulý měsíc“) zadávej parametrem period, server ho přepočítá
+  v pražském čase. „Uhrazené za období“ = payment_state=paid + period_field=paid_on (datum platby)."""
 
 PARSE_ERROR = -32700
 INVALID_REQUEST = -32600

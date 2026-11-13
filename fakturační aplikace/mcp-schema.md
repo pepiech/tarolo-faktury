@@ -1,4 +1,4 @@
-# MCP rozhraní fakturační aplikace – schéma 1.0.0
+# MCP rozhraní fakturační aplikace – schéma 1.1.0
 
 > Generováno z kódu příkazem `python src/manage.py mcp_schema`. Neupravovat ručně.
 
@@ -6,7 +6,7 @@
 
 - Endpoint: `https://<hostname>/mcp/` (MCP Streamable HTTP, bezstavový, odpovědi `application/json`, bez SSE).
 - Podporované verze protokolu: `2025-11-25`, `2025-06-18`, `2025-03-26`.
-- Server: `faktury` 1.0.0.
+- Server: `faktury` 1.1.0.
 - Ověření: Cloudflare Access s Managed OAuth (MCP klient projde OAuth přihlášením Cloudflare); aplikace ověří `Cf-Access-Jwt-Assertion` a uživatele stejně jako u webu. Platí stejná oprávnění po profilech (`invoices:view`, `invoices:modify`, `partners:modify`, admin).
 - Každé volání nástroje se zapíše do auditu (`mcp.call`, rozhraní `mcp`); zápisy navíc vlastní auditní události (např. `invoice.issue`).
 
@@ -24,6 +24,10 @@ Pravidla:
 - Ceny položek jsou bez DPH. U dotazu na zaplacení uveď profil, partnera, číslo a datum faktury, částku,
   zbývající částku, splatnost, stav úhrady a čas/zdroj poslední platby.
 - Ke každému zápisu vygeneruj nový client_request_id; při opakování téhož požadavku použij stejný.
+- Na počty a součty použij total_count/totals_by_profile ze search_invoices, nástroj invoice_stats
+  (seskupení podle partnera, měsíce, stavu) nebo list_payments – neprocházej ručně stránky.
+- Relativní období („tento týden“, „minulý měsíc“) zadávej parametrem period, server ho přepočítá
+  v pražském čase. „Uhrazené za období“ = payment_state=paid + period_field=paid_on (datum platby).
 ```
 
 ## Výsledky a chyby
@@ -141,7 +145,7 @@ Detail partnera v daném profilu včetně posledních dokladů.
 
 *čtení; anotace: readOnlyHint*
 
-Vyhledá doklady (návrhy i vystavené) podle čísla, odběratele, stavu, úhrady, splatnosti a období. Bez profilu hledá ve všech profilech s oprávněním invoices:view a výsledky rozdělí podle profilu. Stránkované.
+Vyhledá doklady (návrhy i vystavené) podle čísla, odběratele, stavu, úhrady, splatnosti, data platby a období (period). Vrací total_count a souhrny po profilech přes VŠECHNY nalezené doklady (ne jen stránku) – pro otázky typu „kolik faktur…“ použij tyto hodnoty. compact=true vrací úsporné řádky. Bez profilu hledá ve všech profilech s oprávněním invoices:view a výsledky i součty rozdělí podle profilu (částky profilů nikdy nesčítej).
 
 ```json
 {
@@ -157,10 +161,14 @@ Vyhledá doklady (návrhy i vystavené) podle čísla, odběratele, stavu, úhra
     "query": {
       "type": "string",
       "maxLength": 100,
-      "description": "Číslo dokladu, VS nebo název odběratele"
+      "description": "Číslo dokladu, VS nebo část názvu odběratele"
     },
     "partner_id": {
       "type": "integer"
+    },
+    "partner_ico": {
+      "type": "string",
+      "pattern": "^\\d{1,8}$"
     },
     "status": {
       "type": "string",
@@ -202,6 +210,264 @@ Vyhledá doklady (návrhy i vystavené) podle čísla, odběratele, stavu, úhra
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
       "description": "Datum ve tvaru RRRR-MM-DD"
+    },
+    "paid_from": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Faktury s (nestornovanou) platbou s datem úhrady od – RRRR-MM-DD"
+    },
+    "paid_to": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Faktury s (nestornovanou) platbou s datem úhrady do – RRRR-MM-DD"
+    },
+    "period": {
+      "type": "string",
+      "enum": [
+        "today",
+        "yesterday",
+        "this_week",
+        "last_week",
+        "last_7_days",
+        "this_month",
+        "last_month",
+        "last_30_days",
+        "this_quarter",
+        "last_quarter",
+        "this_year",
+        "last_year"
+      ],
+      "description": "Pojmenované období počítané na serveru (Europe/Prague, týden od pondělí): today, yesterday, this_week, last_week, last_7_days, this_month, last_month, last_30_days, this_quarter, last_quarter, this_year, last_year. Přednost mají výslovná data."
+    },
+    "period_field": {
+      "type": "string",
+      "enum": [
+        "issue_date",
+        "due_date",
+        "paid_on"
+      ],
+      "default": "issue_date",
+      "description": "Na které datum se period vztahuje: issue_date, due_date, paid_on"
+    },
+    "sort": {
+      "type": "string",
+      "enum": [
+        "issue_date_desc",
+        "issue_date_asc",
+        "due_date_asc",
+        "total_desc",
+        "remaining_desc"
+      ],
+      "default": "issue_date_desc"
+    },
+    "compact": {
+      "type": "boolean",
+      "default": false
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 20
+    },
+    "cursor": {
+      "type": "string",
+      "description": "Hodnota next_cursor z předchozí stránky"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
+```
+
+### `invoice_stats` – Statistiky faktur
+
+*čtení; anotace: readOnlyHint*
+
+Počty a součty dokladů seskupené podle partnera, měsíce vystavení, stavu úhrady nebo stavu dokladu – vždy zvlášť pro každý profil. Hodí se na „kolikrát jsme fakturovali X“, „obrat po měsících“, „kdo dluží nejvíc“. Bez status se počítají jen vystavené doklady (bez návrhů a stornovaných). Filtry jako search_invoices.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "profile": {
+      "type": [
+        "string",
+        "integer"
+      ],
+      "description": "Vystavující profil: id, zkratka (slug) nebo IČO přesně podle list_profiles. Nikdy jej neodhaduj – při nejasnosti se uživatele zeptej."
+    },
+    "query": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "Číslo dokladu, VS nebo část názvu odběratele"
+    },
+    "partner_id": {
+      "type": "integer"
+    },
+    "partner_ico": {
+      "type": "string",
+      "pattern": "^\\d{1,8}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "issued",
+        "cancelled"
+      ]
+    },
+    "payment_state": {
+      "type": "string",
+      "enum": [
+        "unpaid",
+        "partial",
+        "paid",
+        "overpaid"
+      ]
+    },
+    "overdue_only": {
+      "type": "boolean",
+      "default": false
+    },
+    "issued_from": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Datum ve tvaru RRRR-MM-DD"
+    },
+    "issued_to": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Datum ve tvaru RRRR-MM-DD"
+    },
+    "due_from": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Datum ve tvaru RRRR-MM-DD"
+    },
+    "due_to": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Datum ve tvaru RRRR-MM-DD"
+    },
+    "paid_from": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Faktury s (nestornovanou) platbou s datem úhrady od – RRRR-MM-DD"
+    },
+    "paid_to": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Faktury s (nestornovanou) platbou s datem úhrady do – RRRR-MM-DD"
+    },
+    "period": {
+      "type": "string",
+      "enum": [
+        "today",
+        "yesterday",
+        "this_week",
+        "last_week",
+        "last_7_days",
+        "this_month",
+        "last_month",
+        "last_30_days",
+        "this_quarter",
+        "last_quarter",
+        "this_year",
+        "last_year"
+      ],
+      "description": "Pojmenované období počítané na serveru (Europe/Prague, týden od pondělí): today, yesterday, this_week, last_week, last_7_days, this_month, last_month, last_30_days, this_quarter, last_quarter, this_year, last_year. Přednost mají výslovná data."
+    },
+    "period_field": {
+      "type": "string",
+      "enum": [
+        "issue_date",
+        "due_date",
+        "paid_on"
+      ],
+      "default": "issue_date",
+      "description": "Na které datum se period vztahuje: issue_date, due_date, paid_on"
+    },
+    "group_by": {
+      "type": "string",
+      "enum": [
+        "partner",
+        "month",
+        "payment_state",
+        "status",
+        "none"
+      ],
+      "default": "none"
+    },
+    "top": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 20,
+      "description": "Max. počet skupin na profil (u partnerů řazeno podle částky)"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
+```
+
+### `list_payments` – Přijaté platby
+
+*čtení; anotace: readOnlyHint*
+
+Seznam zapsaných plateb za období (podle data úhrady) se součtem po profilech – např. „kolik přišlo peněz tento týden“. Protioperace (opravy) jsou záporné a v součtu se odečtou.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "profile": {
+      "type": [
+        "string",
+        "integer"
+      ],
+      "description": "Vystavující profil: id, zkratka (slug) nebo IČO přesně podle list_profiles. Nikdy jej neodhaduj – při nejasnosti se uživatele zeptej."
+    },
+    "period": {
+      "type": "string",
+      "enum": [
+        "today",
+        "yesterday",
+        "this_week",
+        "last_week",
+        "last_7_days",
+        "this_month",
+        "last_month",
+        "last_30_days",
+        "this_quarter",
+        "last_quarter",
+        "this_year",
+        "last_year"
+      ],
+      "description": "Pojmenované období počítané na serveru (Europe/Prague, týden od pondělí): today, yesterday, this_week, last_week, last_7_days, this_month, last_month, last_30_days, this_quarter, last_quarter, this_year, last_year. Přednost mají výslovná data."
+    },
+    "paid_from": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Datum ve tvaru RRRR-MM-DD"
+    },
+    "paid_to": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Datum ve tvaru RRRR-MM-DD"
+    },
+    "partner_id": {
+      "type": "integer"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "bank_transfer",
+        "cash",
+        "card",
+        "other"
+      ]
     },
     "limit": {
       "type": "integer",

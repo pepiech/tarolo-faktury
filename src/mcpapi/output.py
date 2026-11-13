@@ -117,3 +117,22 @@ def invoice_out(invoice, request=None, detail=False):
                 for p in payments
             ]
     return data
+
+
+def invoice_compact(invoice):
+    """Úsporný řádek dokladu (pro přehledy a počítání)."""
+    issued = invoice.status != InvoiceStatus.DRAFT
+    return {
+        "id": invoice.pk,
+        "profile": profile_ref(invoice.profile),
+        "number": invoice.number,
+        "status": invoice.status,
+        "partner": invoice.partner_snapshot.get("name") if issued else invoice.partner.name,
+        "issue_date": invoice.issue_date.isoformat(),
+        "due_date": invoice.due_date.isoformat(),
+        "total": money(invoice.total),
+        "paid": money(getattr(invoice, "paid_amount", None)) if issued else None,
+        "remaining": money(getattr(invoice, "remaining_amount", None)) if issued else None,
+        "payment_state": invoice.payment_state if issued else None,
+        "overdue": bool(getattr(invoice, "is_overdue", False)),
+    }

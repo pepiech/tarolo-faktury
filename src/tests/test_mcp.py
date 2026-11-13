@@ -421,3 +421,117 @@ def test_schema_document_is_current():
 
     doc = Path(settings.BASE_DIR).parent / "fakturační aplikace" / "mcp-schema.md"
     assert doc.read_text(encoding="utf-8") == render(), "Spusťte: python src/manage.py mcp_schema"
+
+
+# --- MCP 1.1: období, souhrny, statistiky, platby ----------------------------------------------
+
+def test_resolve_period():
+    from mcpapi.query import resolve_period
+
+    ref = date(2026, 11, 13)  # pátek
+    assert resolve_period("this_week", ref) == (date(2026, 11, 9), date(2026, 11, 15))
+    assert resolve_period("last_week", ref) == (date(2026, 11, 2), date(2026, 11, 8))
+    assert resolve_period("last_7_days", ref) == (date(2026, 11, 7), date(2026, 11, 13))
+    assert resolve_period("this_month", ref) == (date(2026, 11, 1), date(2026, 11, 30))
+    assert resolve_period("last_month", ref) == (date(2026, 10, 1), date(2026, 10, 31))
+    assert resolve_period("this_quarter", ref) == (date(2026, 10, 1), date(2026, 12, 31))
+    assert resolve_period("last_quarter", ref) == (date(2026, 7, 1), date(2026, 9, 30))
+    assert resolve_period("last_year", ref) == (date(2025, 1, 1), date(2025, 12, 31))
+    assert resolve_period("this_month", date(2026, 12, 31)) == (date(2026, 12, 1), date(2026, 12, 31))
+
+
+@pytest.fixture
+def ledger(actor, profile, other_profile, partner, make_partner):
+    """F13: 3 faktury (stará uhrazená tento týden, částečná, neuhrazená) + 1 návrh; Martin: 1 faktura."""
+    other_partner = make_partner(profile, name="Jiná s.r.o.", ico="12345679")
+    p2 = make_partner(other_profile, name="DvB-AF s.r.o.")
+
+    def issue(prof, part, issue_date, price):
+        head = header_for(prof, part, issue_date=issue_date, taxable_supply_date=issue_date,
+                          due_date=issue_date.replace(day=min(issue_date.day + 10, 28)))
+        inv = services.create_draft(actor, prof, head, [line(price=price, rate="0")])
+        return services.issue(actor, inv, inv.version)
+
+    old = issue(profile, partner, date(2026, 9, 1), "1000")
+    services.add_payment(actor, old, amount=D("1000"), paid_on=date(2026, 11, 12), method="bank_transfer")
+    part = issue(profile, partner, date(2026, 11, 10), "500")
+    services.add_payment(actor, part, amount=D("200"), paid_on=date(2026, 11, 11), method="cash")
+    unpaid = issue(profile, other_partner, date(2026, 11, 11), "300")
+    services.create_draft(actor, profile, header_for(profile, partner), [line(price="50", rate="0")])
+    other = issue(other_profile, p2, date(2026, 11, 12), "700")
+    services.add_payment(actor, other, amount=D("700"), paid_on=date(2026, 11, 12), method="bank_transfer")
+    return {"old": old, "part": part, "unpaid": unpaid, "other": other}
+
+
+@pytest.fixture
+def frozen_today(monkeypatch):
+    from mcpapi import query
+
+    monkeypatch.setattr(query, "today", lambda: date(2026, 11, 13))
+
+
+def test_paid_this_week_by_payment_date(mcp, ledger, frozen_today):
+    """„Kolik je uhrazených faktur za poslední týden?“ – podle data platby, i u starší faktury."""
+    data = ok(mcp.call("search_invoices", payment_state="paid", period="last_7_days", period_field="paid_on",
+                       compact=True))
+    assert data["total_count"] == 2
+    by = {t["profile"]["slug"]: t for t in data["totals_by_profile"]}
+    assert by["f13"]["issued_count"] == 1 and by["f13"]["paid"] == "1000.00"
+    assert by["martin"]["paid"] == "700.00"
+    numbers = {i["number"] for g in data["results_by_profile"] for i in g["invoices"]}
+    assert numbers == {ledger["old"].number, ledger["other"].number}
+    assert data["filters"]["period_resolved"] == {"field": "paid_on", "from": "2026-11-07", "to": "2026-11-13"}
+    assert set(data["results_by_profile"][0]["invoices"][0]) >= {"number", "partner", "total", "payment_state"}
+    assert "lines" not in data["results_by_profile"][0]["invoices"][0]
+
+
+def test_total_count_spans_all_pages(mcp, ledger):
+    data = ok(mcp.call("search_invoices", profile="f13", limit=1))
+    assert data["returned"] == 1 and data["total_count"] == 4 and data["next_cursor"] == "1"
+    t = data["totals_by_profile"][0]
+    assert (t["count"], t["drafts"], t["issued_count"]) == (4, 1, 3)
+    assert t["issued_total"] == "1800.00" and t["paid"] == "1200.00" and t["remaining"] == "600.00"
+
+
+def test_partially_paid(mcp, ledger):
+    data = ok(mcp.call("search_invoices", payment_state="partial"))
+    assert data["total_count"] == 1
+    assert data["results_by_profile"][0]["invoices"][0]["remaining"] == "300.00"
+
+
+def test_stats_by_partner_and_month(mcp, ledger):
+    """„Kolikrát jsme fakturovali firmu X?“ jedním voláním, po profilech."""
+    data = ok(mcp.call("invoice_stats", group_by="partner"))
+    f13 = next(e for e in data["by_profile"] if e["profile"]["slug"] == "f13")
+    groups = {g["label"]: g for g in f13["groups"]}
+    assert groups["DvB-AF s.r.o."]["count"] == 2 and groups["DvB-AF s.r.o."]["total"] == "1500.00"
+    assert groups["Jiná s.r.o."]["count"] == 1
+    assert f13["summary"]["drafts"] == 0  # bez status jen vystavené
+    martin = next(e for e in data["by_profile"] if e["profile"]["slug"] == "martin")
+    assert martin["groups"][0]["count"] == 1
+    months = ok(mcp.call("invoice_stats", profile="f13", group_by="month"))["by_profile"][0]["groups"]
+    assert [(g["key"], g["count"]) for g in months] == [("2026-09", 1), ("2026-11", 2)]
+    states = ok(mcp.call("invoice_stats", profile="f13", group_by="status"))["by_profile"][0]["groups"]
+    assert {g["key"]: g["count"] for g in states} == {"draft": 1, "issued": 3}
+
+
+def test_list_payments_this_week(mcp, ledger, actor, frozen_today):
+    payment = ledger["part"].payments.get()
+    services.reverse_payment(actor, payment)  # protioperace dnes (13. 11.)
+    data = ok(mcp.call("list_payments", period="this_week"))
+    by = {t["profile"]["slug"]: t for t in data["totals_by_profile"]}
+    assert by["f13"]["count"] == 3 and by["f13"]["sum"] == "1000.00"  # 1000 + 200 − 200
+    assert by["martin"]["sum"] == "700.00"
+    assert data["period"] == {"from": "2026-11-09", "to": "2026-11-15"}
+    assert any(p["is_reversal"] for g in data["results_by_profile"] for p in g["payments"])
+
+
+def test_get_partner_stats(mcp, ledger, partner):
+    data = ok(mcp.call("get_partner", profile="f13", partner_id=partner.pk))["partner"]
+    s = data["invoice_stats"]
+    assert (s["issued_count"], s["drafts"], s["issued_total"]) == (2, 1, "1500.00")
+    assert s["first_issue_date"] == "2026-09-01" and s["last_issue_date"] == "2026-11-10"
+
+
+def test_search_partners_total_count(mcp, ledger):
+    assert ok(mcp.call("search_partners", query="s.r.o.", limit=1))["total_count"] == 3

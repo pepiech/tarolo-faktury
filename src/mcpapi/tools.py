@@ -33,10 +33,11 @@ from profiles.models import BankAccount, NumberSeries, VatRegime, VsRule
 from reports import services as reports
 
 from . import errors as E
+from . import query
 from .errors import ToolError
-from .output import invoice_out, money, partner_out, profile_ref
+from .output import invoice_compact, invoice_out, money, partner_out, profile_ref
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 MAX_LIMIT = 50
 
 
@@ -294,10 +295,11 @@ def search_partners(ctx, args):
     ).select_related("profile").order_by("profile__name", "name", "pk")
     if not args.get("include_inactive"):
         qs = qs.filter(is_active=True)
+    total_count = qs.count()
     page, nxt = _page(list(qs[:500]), args.get("limit"), args.get("cursor"))
     items = [partner_out(p) for p in page]
-    return {"query": q, "results_by_profile": _group(items, "partners"), "returned": len(items),
-            "next_cursor": nxt}
+    return {"query": q, "total_count": total_count, "results_by_profile": _group(items, "partners"),
+            "returned": len(items), "next_cursor": nxt}
 
 
 @tool("get_partner", title="Detail partnera",
@@ -312,46 +314,162 @@ def get_partner(ctx, args):
         recent = (Invoice.objects.for_profile(profile).filter(partner=partner).with_payment_state()
                   .select_related("profile", "partner").prefetch_related("payments__created_by")[:10])
         data["recent_invoices"] = [invoice_out(i, ctx.request) for i in recent]
-    return {"partner": data}
+        all_inv = Invoice.objects.for_profile(profile).filter(partner=partner).with_payment_state()
+        data["invoice_stats"] = query.totals(all_inv)
+        dates = all_inv.exclude(status=InvoiceStatus.DRAFT).order_by("issue_date").values_list("issue_date", flat=True)
+        data["invoice_stats"]["first_issue_date"] = dates.first().isoformat() if dates.exists() else None
+        data["invoice_stats"]["last_issue_date"] = dates.last().isoformat() if dates.exists() else None
+    return {"as_of": _as_of(), "partner": data}
+
+
+FILTERS = {
+    "query": {"type": "string", "maxLength": 100, "description": "Číslo dokladu, VS nebo část názvu odběratele"},
+    "partner_id": {"type": "integer"},
+    "partner_ico": {"type": "string", "pattern": r"^\d{1,8}$"},
+    "status": {"type": "string", "enum": ["draft", "issued", "cancelled"]},
+    "payment_state": {"type": "string", "enum": ["unpaid", "partial", "paid", "overpaid"]},
+    "overdue_only": {"type": "boolean", "default": False},
+    "issued_from": DATE, "issued_to": DATE, "due_from": DATE, "due_to": DATE,
+    "paid_from": {**DATE, "description": "Faktury s (nestornovanou) platbou s datem úhrady od – RRRR-MM-DD"},
+    "paid_to": {**DATE, "description": "Faktury s (nestornovanou) platbou s datem úhrady do – RRRR-MM-DD"},
+    "period": query.PERIOD_SCHEMA,
+    "period_field": {"type": "string", "enum": list(query.DATE_FIELDS), "default": "issue_date",
+                     "description": "Na které datum se period vztahuje: issue_date, due_date, paid_on"},
+}
+
+
+def _as_of():
+    return timezone.localtime().isoformat(timespec="seconds")
 
 
 @tool("search_invoices", title="Hledání faktur",
-      description="Vyhledá doklady (návrhy i vystavené) podle čísla, odběratele, stavu, úhrady, "
-                  "splatnosti a období. Bez profilu hledá ve všech profilech s oprávněním "
-                  "invoices:view a výsledky rozdělí podle profilu. Stránkované.",
-      properties={
-          "profile": PROFILE,
-          "query": {"type": "string", "maxLength": 100, "description": "Číslo dokladu, VS nebo název odběratele"},
-          "partner_id": {"type": "integer"},
-          "status": {"type": "string", "enum": ["draft", "issued", "cancelled"]},
-          "payment_state": {"type": "string", "enum": ["unpaid", "partial", "paid", "overpaid"]},
-          "overdue_only": {"type": "boolean", "default": False},
-          "issued_from": DATE, "issued_to": DATE, "due_from": DATE, "due_to": DATE,
-          "limit": LIMIT, "cursor": CURSOR,
-      })
+      description="Vyhledá doklady (návrhy i vystavené) podle čísla, odběratele, stavu, úhrady, splatnosti, "
+                  "data platby a období (period). Vrací total_count a souhrny po profilech přes VŠECHNY "
+                  "nalezené doklady (ne jen stránku) – pro otázky typu „kolik faktur…“ použij tyto hodnoty. "
+                  "compact=true vrací úsporné řádky. Bez profilu hledá ve všech profilech s oprávněním "
+                  "invoices:view a výsledky i součty rozdělí podle profilu (částky profilů nikdy nesčítej).",
+      properties={"profile": PROFILE, **FILTERS,
+                  "sort": {"type": "string", "enum": list(query.SORTS), "default": "issue_date_desc"},
+                  "compact": {"type": "boolean", "default": False}, "limit": LIMIT, "cursor": CURSOR})
 def search_invoices(ctx, args):
     profiles = _read_profiles(ctx, args.get("profile"), INVOICES_VIEW)
-    qs = (Invoice.objects.filter(profile__in=profiles).with_payment_state()
-          .select_related("profile", "partner").prefetch_related("payments__created_by")
-          .order_by("profile__name", "-issue_date", "-pk"))
-    if args.get("query"):
-        q = args["query"].strip()
-        qs = qs.filter(Q(number__icontains=q) | Q(variable_symbol=q) | Q(partner__name__icontains=q))
+    qs = query.filter_invoices(query.invoice_base(profiles), args)
+    total_count = qs.count()
+    ordering = ("profile__name", *query.SORTS[args.get("sort", "issue_date_desc")])
+    page, nxt = _page(list(qs.order_by(*ordering)[:1000]), args.get("limit"), args.get("cursor"))
+    if args.get("compact"):
+        items = [invoice_compact(i) for i in page]
+    else:
+        items = [invoice_out(i, ctx.request) for i in page]
+    totals = [{"profile": profile_ref(p), **query.totals(qs.filter(profile=p))}
+              for p in profiles if qs.filter(profile=p).exists()]
+    return {"as_of": _as_of(), "filters": query.applied_filters(args), "total_count": total_count,
+            "totals_by_profile": totals, "results_by_profile": _group(items, "invoices"),
+            "returned": len(items), "next_cursor": nxt}
+
+
+GROUPS = {
+    "partner": ("partner_id", "partner__name"),
+    "month": ("month", None),
+    "payment_state": ("payment_state", None),
+    "status": ("status", None),
+    "none": (None, None),
+}
+
+
+@tool("invoice_stats", title="Statistiky faktur",
+      description="Počty a součty dokladů seskupené podle partnera, měsíce vystavení, stavu úhrady nebo stavu "
+                  "dokladu – vždy zvlášť pro každý profil. Hodí se na „kolikrát jsme fakturovali X“, "
+                  "„obrat po měsících“, „kdo dluží nejvíc“. Bez status se počítají jen vystavené doklady "
+                  "(bez návrhů a stornovaných). Filtry jako search_invoices.",
+      properties={"profile": PROFILE, **FILTERS,
+                  "group_by": {"type": "string", "enum": list(GROUPS), "default": "none"},
+                  "top": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20,
+                          "description": "Max. počet skupin na profil (u partnerů řazeno podle částky)"}})
+def invoice_stats(ctx, args):
+    from django.db.models import Count, Sum
+    from django.db.models.functions import Coalesce, TruncMonth
+
+    profiles = _read_profiles(ctx, args.get("profile"), INVOICES_VIEW)
+    filters = dict(args)
+    if args.get("group_by") != "status":
+        filters.setdefault("status", InvoiceStatus.ISSUED)
+    base = query.filter_invoices(Invoice.objects.filter(profile__in=profiles).with_payment_state(), filters)
+    group_by = args.get("group_by", "none")
+    key, label_field = GROUPS[group_by]
+    top = args.get("top", 20)
+    result = []
+    for p in profiles:
+        qs = base.filter(profile=p)
+        if not qs.exists():
+            continue
+        entry = {"profile": profile_ref(p), "summary": query.totals(qs)}
+        if key:
+            grouped = qs.annotate(month=TruncMonth("issue_date")) if group_by == "month" else qs
+            fields = [key] + ([label_field] if label_field else [])
+            rows = (grouped.values(*fields)
+                    .annotate(count=Count("id"), total=Coalesce(Sum("total"), query.ZERO),
+                              paid=Coalesce(Sum("paid_amount"), query.ZERO),
+                              remaining=Coalesce(Sum("remaining_amount"), query.ZERO)))
+            rows = rows.order_by("-total") if group_by == "partner" else rows.order_by(key)
+            groups = []
+            for row in rows[:top]:
+                value = row[key]
+                group = {"key": value.strftime("%Y-%m") if group_by == "month" else value,
+                         "count": row["count"], "total": money(row["total"]), "paid": money(row["paid"]),
+                         "remaining": money(row["remaining"])}
+                if label_field:
+                    group["label"] = row[label_field]
+                groups.append(group)
+            entry["groups"] = groups
+        result.append(entry)
+    return {"as_of": _as_of(), "group_by": group_by, "filters": query.applied_filters(filters),
+            "currency": "CZK", "by_profile": result,
+            "note": "Částky různých profilů se nesčítají – jde o různé vystavitele."}
+
+
+@tool("list_payments", title="Přijaté platby",
+      description="Seznam zapsaných plateb za období (podle data úhrady) se součtem po profilech – např. "
+                  "„kolik přišlo peněz tento týden“. Protioperace (opravy) jsou záporné a v součtu se odečtou.",
+      properties={"profile": PROFILE, "period": query.PERIOD_SCHEMA, "paid_from": DATE, "paid_to": DATE,
+                  "partner_id": {"type": "integer"}, "method": METHOD, "limit": LIMIT, "cursor": CURSOR})
+def list_payments(ctx, args):
+    from django.db.models import Count, Sum
+    from django.db.models.functions import Coalesce
+
+    from invoicing.models import Payment
+
+    profiles = _read_profiles(ctx, args.get("profile"), INVOICES_VIEW)
+    start, end = query.date_range({**args, "period_field": "paid_on"}, "paid_on", "paid_from", "paid_to")
+    qs = Payment.objects.filter(invoice__profile__in=profiles).select_related(
+        "invoice__profile", "invoice__partner", "created_by")
+    if start:
+        qs = qs.filter(paid_on__gte=start)
+    if end:
+        qs = qs.filter(paid_on__lte=end)
     if args.get("partner_id"):
-        qs = qs.filter(partner_id=args["partner_id"])
-    if args.get("status"):
-        qs = qs.filter(status=args["status"])
-    if args.get("payment_state"):
-        qs = qs.filter(payment_state=args["payment_state"]).exclude(status=InvoiceStatus.DRAFT)
-    if args.get("overdue_only"):
-        qs = qs.filter(is_overdue=True)
-    for key, lookup in (("issued_from", "issue_date__gte"), ("issued_to", "issue_date__lte"),
-                        ("due_from", "due_date__gte"), ("due_to", "due_date__lte")):
-        if args.get(key):
-            qs = qs.filter(**{lookup: _date(args[key], key)})
-    page, nxt = _page(list(qs[:1000]), args.get("limit"), args.get("cursor"))
-    items = [invoice_out(i, ctx.request) for i in page]
-    return {"results_by_profile": _group(items, "invoices"), "returned": len(items), "next_cursor": nxt}
+        qs = qs.filter(invoice__partner_id=args["partner_id"])
+    if args.get("method"):
+        qs = qs.filter(method=args["method"])
+    total_count = qs.count()
+    page, nxt = _page(list(qs.order_by("invoice__profile__name", "-paid_on", "-pk")[:1000]),
+                      args.get("limit"), args.get("cursor"))
+    items = [{
+        "id": p.pk, "profile": profile_ref(p.invoice.profile), "paid_on": p.paid_on.isoformat(),
+        "amount": money(p.amount), "method": p.method, "reference": p.reference, "note": p.note,
+        "is_reversal": p.reverses_id is not None, "source": p.source,
+        "recorded_at": p.created_at.isoformat(), "recorded_by": p.created_by.email,
+        "invoice": {"id": p.invoice_id, "number": p.invoice.number, "partner": p.invoice.partner.name},
+    } for p in page]
+    totals = []
+    for prof in profiles:
+        agg = qs.filter(invoice__profile=prof).aggregate(count=Count("id"), sum=Coalesce(Sum("amount"), query.ZERO))
+        if agg["count"]:
+            totals.append({"profile": profile_ref(prof), "count": agg["count"], "sum": money(agg["sum"])})
+    return {"as_of": _as_of(), "period": {"from": start.isoformat() if start else None,
+                                          "to": end.isoformat() if end else None},
+            "total_count": total_count, "totals_by_profile": totals,
+            "results_by_profile": _group(items, "payments"), "returned": len(items), "next_cursor": nxt}
 
 
 @tool("get_invoice", title="Detail dokladu",
