@@ -133,4 +133,12 @@ def test_no_horizontal_overflow_on_mobile(browser, live_server, make_user, make_
         page.goto(path)
         sw, w = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
         assert sw <= w, f"{path}: stránka je široká {sw} px při displeji {w} px"
+        too_wide = page.evaluate(
+            "[...document.querySelectorAll('table.data')].filter(t => t.scrollWidth > t.clientWidth + 1).length"
+        )
+        assert too_wide == 0, f"{path}: tabulka je širší než displej (posouvání do strany)"
+    page.goto(f"/p/{s}/faktury/")
+    row = page.locator("table.data tbody tr").first
+    assert row.evaluate("r => getComputedStyle(r).display") == "block"  # řádek jako karta
+    assert row.locator("td[data-label='Splatnost']").is_visible()
     context.close()

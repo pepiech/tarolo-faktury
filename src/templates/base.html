@@ -57,11 +57,20 @@ document.addEventListener("htmx:configRequest", function (e) {
 });
 </script>
 <script>
-// Široké tabulky se na úzkém displeji posouvají samy, ne celá stránka.
-document.querySelectorAll("table.data:not(.lines)").forEach(function (t) {
-  if (t.parentElement.classList.contains("table-scroll")) return;
-  var w = document.createElement("div"); w.className = "table-scroll";
-  t.parentNode.insertBefore(w, t); w.appendChild(t);
+// Popisky sloupců pro mobilní zobrazení tabulek jako karet (beze změny na počítači).
+document.querySelectorAll("table.data:not(.lines)").forEach(function (table) {
+  var heads = Array.prototype.map.call(table.querySelectorAll("thead th"), function (th) {
+    return (th.getAttribute("data-label") || th.textContent).replace(/\s+/g, " ").trim();
+  });
+  if (!heads.length) return;
+  table.querySelectorAll("tbody tr").forEach(function (tr) {
+    var col = 0;
+    Array.prototype.forEach.call(tr.children, function (td) {
+      var label = heads[col];
+      if (label && !td.hasAttribute("colspan")) td.setAttribute("data-label", label);
+      col += parseInt(td.getAttribute("colspan") || "1", 10);
+    });
+  });
 });
 </script>
 {% block scripts %}{% endblock %}

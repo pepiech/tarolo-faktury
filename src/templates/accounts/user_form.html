@@ -15,7 +15,7 @@
   </div>
   <h2>Oprávnění v profilech</h2>
   <table class="data perm-grid">
-    <thead><tr><th>Profil</th><th>invoices:view<br><span class="muted">čtení dokladů</span></th><th>invoices:modify<br><span class="muted">návrhy, vystavení, platby</span></th><th>partners:modify<br><span class="muted">správa partnerů</span></th></tr></thead>
+    <thead><tr><th>Profil</th><th data-label="Čtení dokladů (invoices:view)">invoices:view<br><span class="muted">čtení dokladů</span></th><th data-label="Návrhy, vystavení, platby (invoices:modify)">invoices:modify<br><span class="muted">návrhy, vystavení, platby</span></th><th data-label="Správa partnerů (partners:modify)">partners:modify<br><span class="muted">správa partnerů</span></th></tr></thead>
     <tbody>
     {% for profile, fields in form.permission_rows %}
       <tr><td>{{ profile.name }} <span class="muted">IČO {{ profile.ico }}</span></td>{% for f in fields %}<td>{{ f }}</td>{% endfor %}</tr>
