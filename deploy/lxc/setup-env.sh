@@ -3,6 +3,8 @@
 #
 # Použití (jako root v LXC):
 #   bash /srv/repos/tarolo-faktury/deploy/lxc/setup-env.sh staging 8102 faktury-test.vagasutca.org
+#   bash /srv/repos/tarolo-faktury/deploy/lxc/setup-env.sh production 8101 faktury.vagasutca.org
+# Skript je bezpečné spouštět opakovaně (po změnách v deploy/lxc/); doplní jen chybějící věci.
 #
 # Vytvoří: systémového uživatele faktury-<env>, adresáře /srv/apps/faktury-<env>,
 # PostgreSQL roli a databázi faktury_<env>, /etc/faktury/<env>.env s náhodnými tajemstvími,
@@ -38,10 +40,14 @@ ENV_FILE="$ENV_DIR/$ENV_NAME.env"
 SERVICE="faktury-$ENV_NAME"
 LOG_DIR="/var/log/faktury-$ENV_NAME"
 RUNNER_USER=ghrunner
+CF_TEAM_DOMAIN=${CF_ACCESS_TEAM_DOMAIN:-frosty-sound-32ef.cloudflareaccess.com}
+CF_AUD=${CF_ACCESS_AUD:-e299b4e25a15ca4349afb4f8bdbbd04172b51de545fe85383db90c81404c9c2d}
 
 echo "==> Balíčky"
 apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sudo curl git python3-venv >/dev/null
+# libpango/libharfbuzz/fonty: generování PDF (WeasyPrint)
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sudo curl git python3-venv \
+    libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fontconfig fonts-dejavu-core >/dev/null
 
 echo "==> Uživatelé"
 if ! getent passwd "$APP_USER" >/dev/null; then
@@ -53,8 +59,8 @@ fi
 
 echo "==> Adresáře"
 install -d -o root -g "$APP_USER" -m 0750 "$APP_ROOT" "$APP_ROOT/releases"
-install -d -o root -g root -m 0700 "$APP_ROOT/backups"
-install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_ROOT/shared" "$APP_ROOT/shared/media"
+install -d -o root -g root -m 0700 "$APP_ROOT/backups" "$APP_ROOT/backups/deploy" "$APP_ROOT/backups/nightly"
+install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_ROOT/shared" "$APP_ROOT/shared/media" "$APP_ROOT/shared/cache"
 install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$LOG_DIR"
 [ -e "$LOG_DIR/application.log" ] || install -o "$APP_USER" -g "$APP_USER" -m 0640 /dev/null "$LOG_DIR/application.log"
 install -d -o root -g root -m 0755 "$ENV_DIR"
@@ -78,7 +84,23 @@ if [ ! -f "$ENV_FILE" ]; then
     umask 022
     echo "    vytvořen"
 else
-    echo "    existuje, ponechávám beze změny"
+    echo "    existuje, doplňuji jen chybějící klíče"
+fi
+
+ensure_env() {
+    if ! grep -q "^$1=" "$ENV_FILE"; then
+        printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
+        echo "    doplněno: $1"
+    fi
+}
+ensure_env CF_ACCESS_TEAM_DOMAIN "$CF_TEAM_DOMAIN"
+ensure_env CF_ACCESS_AUD "$CF_AUD"
+if ! grep -q '^BOOTSTRAP_ADMIN_EMAILS=' "$ENV_FILE"; then
+    ADMIN_EMAILS=${BOOTSTRAP_ADMIN_EMAILS:-}
+    while ! [[ "$ADMIN_EMAILS" =~ ^[^@[:space:],]+@[^@[:space:],]+(,[^@[:space:],]+@[^@[:space:],]+)*$ ]]; do
+        read -r -p "E-mail správce aplikace (stejný jako pro přihlášení do Cloudflare Access; více oddělit čárkou): " ADMIN_EMAILS
+    done
+    ensure_env BOOTSTRAP_ADMIN_EMAILS "$ADMIN_EMAILS"
 fi
 chown root:"$APP_USER" "$ENV_FILE"
 chmod 0640 "$ENV_FILE"
@@ -109,6 +131,7 @@ User=$APP_USER
 Group=$APP_USER
 WorkingDirectory=$APP_ROOT/current/src
 EnvironmentFile=$ENV_FILE
+Environment=XDG_CACHE_HOME=$APP_ROOT/shared/cache
 ExecStart=$APP_ROOT/current/venv/bin/gunicorn --bind \${GUNICORN_BIND} --workers 2 --threads 2 --timeout 60 --access-logfile - --error-logfile - config.wsgi:application
 ExecReload=/bin/kill -s HUP \$MAINPID
 Restart=on-failure
@@ -147,12 +170,39 @@ $LOG_DIR/application.log {
 }
 EOF
 
+echo "==> Noční záloha (faktury-backup@$ENV_NAME.timer)"
+install -o root -g root -m 0755 "$SCRIPT_DIR/faktury-backup" /usr/local/sbin/faktury-backup
+cat > /etc/systemd/system/faktury-backup@.service <<'UNIT'
+[Unit]
+Description=Záloha databáze a souborů aplikace faktury (%i)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/faktury-backup %i
+UNIT
+cat > /etc/systemd/system/faktury-backup@.timer <<'UNIT'
+[Unit]
+Description=Noční záloha aplikace faktury (%i)
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now "faktury-backup@$ENV_NAME.timer" >/dev/null
+
 echo "==> Deploy skript a sudoers"
 install -o root -g root -m 0755 "$SCRIPT_DIR/faktury-deploy" /usr/local/sbin/faktury-deploy
 SUDOERS_TMP=$(mktemp)
 cat > "$SUDOERS_TMP" <<EOF
 # Runner GitHub Actions smí spustit jen deploy skript (ten si argumenty sám ověřuje).
-$RUNNER_USER ALL=(root) NOPASSWD: /usr/local/sbin/faktury-deploy staging *
+# Produkce: deploy skript sám ověří, že commit nese tag v*.
+$RUNNER_USER ALL=(root) NOPASSWD: /usr/local/sbin/faktury-deploy staging *, /usr/local/sbin/faktury-deploy production *
 EOF
 visudo -cf "$SUDOERS_TMP" >/dev/null
 install -o root -g root -m 0440 "$SUDOERS_TMP" /etc/sudoers.d/faktury-deploy

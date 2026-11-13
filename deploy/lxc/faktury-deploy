@@ -60,10 +60,11 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 RELEASE="$APP_ROOT/releases/$STAMP-${SHA:0:12}"
 
 echo "==> Záloha databáze $DB_NAME"
-BACKUP="$APP_ROOT/backups/$DB_NAME-$STAMP.dump"
+install -d -o root -g root -m 0700 "$APP_ROOT/backups/deploy"
+BACKUP="$APP_ROOT/backups/deploy/$DB_NAME-$STAMP.dump"
 runuser -u postgres -- pg_dump --format=custom "$DB_NAME" > "$BACKUP"
 chmod 0600 "$BACKUP"
-ls -1t "$APP_ROOT"/backups/*.dump 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f --
+ls -1t "$APP_ROOT"/backups/deploy/*.dump 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f --
 echo "    $BACKUP"
 
 echo "==> Release $RELEASE"
@@ -97,6 +98,7 @@ echo "==> Kontrola, migrace, statické soubory"
 manage check --deploy --fail-level ERROR || fail_release "manage.py check selhal"
 manage migrate --noinput || fail_release "migrace selhala (záloha: $BACKUP)"
 manage collectstatic --noinput --verbosity 0 || fail_release "collectstatic selhal"
+manage bootstrap || fail_release "bootstrap (výchozí data) selhal"
 
 # Kód aplikace je pro běžící službu pouze ke čtení.
 chown -R root:"$APP_USER" "$RELEASE"

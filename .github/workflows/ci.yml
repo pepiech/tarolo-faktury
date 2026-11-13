@@ -18,7 +18,7 @@ jobs:
   test:
     name: Testy
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -48,13 +48,19 @@ jobs:
           cache-dependency-path: |
             requirements.lock.txt
             requirements-dev.txt
+      - name: Systémové knihovny pro PDF
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
       - name: Závislosti
-        run: pip install -r requirements.lock.txt -r requirements-dev.txt
+        run: |
+          pip install -r requirements.lock.txt -r requirements-dev.txt
+          python -m playwright install --with-deps chromium
+      - name: Ruff
+        run: ruff check src
       - name: Django check
         run: python src/manage.py check
       - name: Chybějící migrace
         run: python src/manage.py makemigrations --check --dry-run
-      - name: Testy
+      - name: Testy (včetně E2E v prohlížeči)
         run: pytest
 
   deploy-staging:
@@ -71,3 +77,18 @@ jobs:
         env:
           SHA: ${{ github.sha }}
         run: sudo -n /usr/local/sbin/faktury-deploy staging "$SHA"
+
+  deploy-production:
+    name: Nasazení do produkce
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    runs-on: [self-hosted, faktury-deploy]
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: faktury-deploy production
+        env:
+          SHA: ${{ github.sha }}
+        run: sudo -n /usr/local/sbin/faktury-deploy production "$SHA"

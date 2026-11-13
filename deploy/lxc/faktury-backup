@@ -1,0 +1,25 @@
+#!/bin/bash
+# Noční záloha prostředí aplikace faktury: databáze (pg_dump) + soubory (shared/media).
+# Spouští ji systemd timer faktury-backup@<env>.timer; ručně: faktury-backup staging
+set -euo pipefail
+umask 077
+
+ENV_NAME=${1:-}
+[[ "$ENV_NAME" =~ ^(staging|production)$ ]] || { echo "použití: faktury-backup <staging|production>" >&2; exit 2; }
+APP_ROOT="/srv/apps/faktury-$ENV_NAME"
+ENV_FILE="/etc/faktury/$ENV_NAME.env"
+DEST="$APP_ROOT/backups/nightly"
+KEEP_DAYS=30
+
+DB_NAME=$(sed -n 's/^POSTGRES_DB=//p' "$ENV_FILE" | tail -n 1)
+STAMP=$(date +%Y%m%d-%H%M%S)
+install -d -m 0700 "$DEST"
+
+runuser -u postgres -- pg_dump --format=custom "$DB_NAME" > "$DEST/$DB_NAME-$STAMP.dump.tmp"
+mv "$DEST/$DB_NAME-$STAMP.dump.tmp" "$DEST/$DB_NAME-$STAMP.dump"
+tar -czf "$DEST/media-$STAMP.tar.gz.tmp" -C "$APP_ROOT/shared" media
+mv "$DEST/media-$STAMP.tar.gz.tmp" "$DEST/media-$STAMP.tar.gz"
+(cd "$DEST" && sha256sum "$DB_NAME-$STAMP.dump" "media-$STAMP.tar.gz" > "SHA256SUMS-$STAMP")
+
+find "$DEST" -maxdepth 1 -type f -mtime +"$KEEP_DAYS" -delete
+echo "Záloha $ENV_NAME hotová: $DEST/*-$STAMP*"
