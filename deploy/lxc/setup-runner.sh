@@ -39,6 +39,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl tar ca-certificates l
 echo "==> Stahuji runner $RUNNER_VERSION"
 TARBALL="actions-runner-linux-$ARCH-$RUNNER_VERSION.tar.gz"
 TMP=$(mktemp -d)
+trap 'rm -rf -- "$TMP"' EXIT
 curl -fsSL -o "$TMP/$TARBALL" "https://github.com/actions/runner/releases/download/v$RUNNER_VERSION/$TARBALL"
 echo "$RUNNER_SHA256_X64  $TMP/$TARBALL" | sha256sum -c --quiet - || {
     echo "Kontrolní součet nesouhlasí, instalace přerušena." >&2
@@ -46,8 +47,8 @@ echo "$RUNNER_SHA256_X64  $TMP/$TARBALL" | sha256sum -c --quiet - || {
 }
 
 install -d -o "$RUNNER_USER" -g "$RUNNER_USER" -m 0750 "$RUNNER_DIR"
-runuser -u "$RUNNER_USER" -- tar -xzf "$TMP/$TARBALL" -C "$RUNNER_DIR"
-rm -rf -- "$TMP"
+tar -xzf "$TMP/$TARBALL" -C "$RUNNER_DIR" --no-same-owner
+chown -R "$RUNNER_USER:$RUNNER_USER" "$RUNNER_DIR"
 
 echo "==> Závislosti runneru"
 "$RUNNER_DIR/bin/installdependencies.sh" >/dev/null || echo "    (installdependencies.sh skončil chybou; libicu je nainstalované, pokračuji)"
