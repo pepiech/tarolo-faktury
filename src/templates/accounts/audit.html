@@ -3,11 +3,18 @@
 {% block content %}
 <h1>Správa</h1>
 {% include "accounts/_nav.html" %}
-<form method="get" class="filters">
-  <div><label>Profil</label><select name="profil"><option value="">— všechny —</option>{% for p in profiles %}<option value="{{ p.pk }}" {% if selected_profile == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
-  <div><label>Akce začíná</label><input type="text" name="akce" value="{{ action }}" placeholder="invoice."></div>
-  <div><button type="submit">Filtrovat</button></div>
+<form method="get" class="filters audit-filters">
+  {% for f in form %}
+  <div><label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% for err in f.errors %}<div class="error">{{ err }}</div>{% endfor %}</div>
+  {% endfor %}
+  <div class="filter-actions"><button type="submit">Filtrovat</button>{% if filtered %} <a href="{% url 'accounts:audit' %}">Zrušit filtry</a>{% endif %}</div>
 </form>
-{% include "audit/_events.html" with events=page.object_list %}
-<div class="actions">{% if page.has_previous %}<a href="?strana={{ page.previous_page_number }}&profil={{ selected_profile|default:'' }}&akce={{ action }}">« novější</a>{% endif %} <span class="muted">strana {{ page.number }} / {{ page.paginator.num_pages }}</span> {% if page.has_next %}<a href="?strana={{ page.next_page_number }}&profil={{ selected_profile|default:'' }}&akce={{ action }}">starší »</a>{% endif %}</div>
+<div class="audit-bar">
+  <span class="presets">Rychle: {% for label, od in presets %}<a href="{% querystring od=od do=None strana=None %}">{{ label }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</span>
+  <span class="muted">{{ page.paginator.count }} záznamů{% if filtered %} odpovídá filtru{% endif %}</span>
+</div>
+{% include "audit/_events.html" with events=views %}
+{% if page.paginator.num_pages > 1 %}
+<div class="actions">{% if page.has_previous %}<a href="{% querystring strana=page.previous_page_number %}">« novější</a>{% endif %} <span class="muted">strana {{ page.number }} / {{ page.paginator.num_pages }}</span> {% if page.has_next %}<a href="{% querystring strana=page.next_page_number %}">starší »</a>{% endif %}</div>
+{% endif %}
 {% endblock %}

@@ -1,13 +1,40 @@
-<table class="data">
-  <thead><tr><th>Čas</th><th>Kdo</th><th>Rozhraní</th><th>Profil</th><th>Akce</th><th>Objekt</th><th>Změna</th></tr></thead>
+<table class="data audit">
+  <thead><tr><th>Čas</th><th>Uživatel</th><th>Rozhraní</th>{% if not compact %}<th>Profil</th>{% endif %}<th>Akce</th>{% if not compact %}<th>Objekt</th>{% endif %}<th>Změna</th><th class="toggle-col"><span class="sr-only">Detail</span></th></tr></thead>
   <tbody>
-  {% for e in events %}
-  <tr>
-    <td>{{ e.at|cz_date }}</td><td>{{ e.actor|default:"systém" }}</td><td>{{ e.get_interface_display }}</td>
-    <td>{{ e.profile|default:"" }}</td><td><code>{{ e.action }}</code></td><td>{{ e.object_type }} #{{ e.object_id }}</td>
-    <td class="wrap">{% if e.before %}<div class="muted" title="{{ e.before }}">před: {{ e.before|truncatechars:240 }}</div>{% endif %}{% if e.after %}<div title="{{ e.after }}">po: {{ e.after|truncatechars:240 }}</div>{% endif %}{% if e.note %}<div><em>{{ e.note }}</em></div>{% endif %}</td>
+  {% for v in events %}{% with e=v.event %}
+  <tr class="audit-row" data-audit-id="{{ e.pk }}">
+    <td class="nowrap" title="{{ e.at|date:'j. n. Y H:i:s' }}">{{ e.at|date:"j. n. Y H:i" }}</td>
+    <td class="nowrap" title="{{ e.actor.email|default:'' }}">{% if e.actor %}{{ e.actor }}{% else %}<span class="muted">systém</span>{% endif %}</td>
+    <td class="nowrap"><span class="iface iface-{{ e.interface }}">{{ e.get_interface_display }}</span></td>
+    {% if not compact %}<td class="nowrap">{{ e.profile|default:"" }}</td>{% endif %}
+    <td class="nowrap" title="{{ e.action }}">{{ v.action_label }}</td>
+    {% if not compact %}<td class="nowrap">{% if v.object_url %}<a href="{{ v.object_url }}">{{ v.object_label }}</a>{% else %}{{ v.object_label }}{% endif %}</td>{% endif %}
+    <td class="change" title="{{ v.summary_text }}"><span>{{ v.summary_text }}</span></td>
+    <td class="toggle-col"><button type="button" class="audit-toggle" aria-expanded="false" aria-label="Zobrazit detail záznamu">▸</button></td>
   </tr>
-  {% empty %}<tr><td colspan="7" class="muted">Žádné záznamy.</td></tr>
+  <tr class="audit-detail" hidden>
+    <td colspan="{% if compact %}6{% else %}8{% endif %}">
+      <div class="audit-detail-body">
+        {% if v.rows %}
+        <div class="diff-grid cols-{% if e.before and e.after %}3{% else %}2{% endif %}">
+          <div class="h">Pole</div>{% if e.before %}<div class="h">{% if e.after %}Před{% else %}Hodnota{% endif %}</div>{% endif %}{% if e.after %}<div class="h">{% if e.before %}Po{% else %}Hodnota{% endif %}</div>{% endif %}
+          {% for c in v.rows %}<div class="k">{{ c.label }}</div>{% if e.before %}<div class="{% if c.kind == 'change' %}old{% endif %}">{{ c.before|default:"—" }}</div>{% endif %}{% if e.after %}<div class="{% if c.kind == 'change' %}new{% endif %}">{{ c.after|default:"—" }}</div>{% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+        <dl class="meta">
+          <dt>Akce</dt><dd><code>{{ e.action }}</code></dd>
+          {% if e.object_type %}<dt>Objekt</dt><dd><code>{{ e.object_type }} #{{ e.object_id }}</code></dd>{% endif %}
+          <dt>Čas</dt><dd>{{ e.at|date:"j. n. Y H:i:s" }}</dd>
+          {% if e.actor %}<dt>Uživatel</dt><dd>{{ e.actor.email }}</dd>{% endif %}
+          {% if e.note %}<dt>{% if e.action == "mcp.call" %}Parametry{% else %}Poznámka{% endif %}</dt><dd class="wrap">{{ e.note }}</dd>{% endif %}
+          {% if e.request_id %}<dt>Request ID</dt><dd><code>{{ e.request_id }}</code></dd>{% endif %}
+        </dl>
+        <details class="raw"><summary>Technický záznam (JSON)</summary><pre>{{ v.raw }}</pre></details>
+      </div>
+    </td>
+  </tr>
+  {% endwith %}{% empty %}<tr><td colspan="{% if compact %}6{% else %}8{% endif %}" class="muted">Žádné záznamy.</td></tr>
   {% endfor %}
   </tbody>
 </table>

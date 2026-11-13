@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.permissions import INVOICES_MODIFY, INVOICES_VIEW, actor_from_request
 from audit.models import AuditEvent
+from audit.presentation import present
 from core.concurrency import ConcurrentUpdate
 from core.decorators import profile_view
 from partners.models import Partner
@@ -230,9 +231,9 @@ def invoice_detail(request, profile, pk):
         "payments": invoice.payments.select_related("created_by", "reverses"),
         "deliveries": invoice.deliveries.select_related("created_by"),
         "reminders": invoice.reminders.select_related("created_by"),
-        "events": AuditEvent.objects.filter(profile=profile).filter(
+        "events": present(AuditEvent.objects.filter(profile=profile).filter(
             object_id=str(invoice.pk), object_type="invoicing.invoice"
-        ).select_related("actor")[:50],
+        ).select_related("actor")[:50]),
         "payment_form": PaymentForm(initial={"amount": invoice.remaining_amount if invoice.remaining_amount > 0 else None,
                                              "method": invoice.payment_method}),
         "delivery_form": DeliveryForm(),

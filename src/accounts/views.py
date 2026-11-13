@@ -1,10 +1,15 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from audit import services as audit
+from audit.forms import AuditFilterForm
 from audit.models import AuditEvent
+from audit.presentation import present
 from core.concurrency import ConcurrentUpdate, lock_and_check
 from core.decorators import admin_view
 from profiles import services as profile_services
@@ -75,15 +80,18 @@ def profile_create(request):
 
 @admin_view
 def audit_log(request):
-    events = AuditEvent.objects.select_related("actor", "profile")
-    profile_id = request.GET.get("profil")
-    if profile_id:
-        events = events.filter(profile_id=profile_id)
-    action = request.GET.get("akce")
-    if action:
-        events = events.filter(action__startswith=action)
+    form = AuditFilterForm(request.GET or None)
+    events = form.filter(AuditEvent.objects.select_related("actor", "profile"))
     page = Paginator(events, 100).get_page(request.GET.get("strana"))
+    now = timezone.localtime()
+    fmt = "%Y-%m-%dT%H:%M"
+    presets = [
+        ("Poslední hodina", (now - timedelta(hours=1)).strftime(fmt)),
+        ("Dnes", now.replace(hour=0, minute=0).strftime(fmt)),
+        ("7 dní", (now - timedelta(days=7)).strftime(fmt)),
+        ("30 dní", (now - timedelta(days=30)).strftime(fmt)),
+    ]
     return render(request, "accounts/audit.html", {
-        "page": page, "profiles": BillingProfile.objects.all(),
-        "selected_profile": profile_id, "action": action or "",
+        "form": form, "page": page, "views": present(page.object_list), "presets": presets,
+        "filtered": any(v for k, v in request.GET.items() if k != "strana"),
     })

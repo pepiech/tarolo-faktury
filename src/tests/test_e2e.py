@@ -143,3 +143,35 @@ def test_no_horizontal_overflow_on_mobile(browser, live_server, make_user, make_
     assert row.evaluate("r => getComputedStyle(r).display") == "block"  # řádek jako karta
     assert row.locator("td[data-label='Splatnost']").is_visible()
     context.close()
+
+
+def test_audit_rows_single_line_and_expandable(browser_for, make_user, make_profile, make_partner):
+    from accounts.models import User
+    from accounts.permissions import Actor
+    from audit import services as audit
+
+    profile = make_profile("f13", "06646654", name="F13 CyberTech s.r.o.")
+    partner = make_partner(profile)
+    make_user("admin@test.cz", admin=True)
+    actor = Actor(user=User.objects.get(email="admin@test.cz"))
+    long_note = "Velmi dlouhá poznámka " * 30
+    audit.record(actor, "partner.update", profile=profile, obj=partner,
+                 before={"name": "Stará firma", "street": "A", "city": "B", "version": 1},
+                 after={"name": "Nová firma", "street": "C", "city": "D", "version": 2}, note=long_note)
+    page = browser_for("admin@test.cz")
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto("/sprava/audit/")
+    row = page.locator("tr.audit-row").first
+    assert row.bounding_box()["height"] < 48  # jeden řádek i s dlouhou poznámkou
+    detail = page.locator("tr.audit-detail").first
+    assert not detail.is_visible()
+    row.locator("td.change").click()
+    assert detail.is_visible()
+    assert "Stará firma" in detail.locator(".diff-grid").inner_text()
+    assert detail.locator(".diff-grid .new").first.inner_text() == "Nová firma"  # pořadí polí podle modelu
+    assert not detail.locator("details.raw pre").is_visible()
+    detail.get_by_text("Technický záznam (JSON)").click()
+    assert '"version": 2' in detail.locator("details.raw pre").inner_text()
+    row.locator(".audit-toggle").click()
+    assert not detail.is_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

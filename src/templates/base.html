@@ -59,11 +59,11 @@ document.addEventListener("htmx:configRequest", function (e) {
 <script>
 // Popisky sloupců pro mobilní zobrazení tabulek jako karet (beze změny na počítači).
 document.querySelectorAll("table.data:not(.lines)").forEach(function (table) {
-  var heads = Array.prototype.map.call(table.querySelectorAll("thead th"), function (th) {
+  var heads = Array.prototype.map.call(table.querySelectorAll(":scope > thead > tr > th"), function (th) {
     return (th.getAttribute("data-label") || th.textContent).replace(/\s+/g, " ").trim();
   });
   if (!heads.length) return;
-  table.querySelectorAll("tbody tr").forEach(function (tr) {
+  table.querySelectorAll(":scope > tbody > tr").forEach(function (tr) {
     var col = 0;
     Array.prototype.forEach.call(tr.children, function (td) {
       var label = heads[col];
@@ -71,6 +71,19 @@ document.querySelectorAll("table.data:not(.lines)").forEach(function (table) {
       col += parseInt(td.getAttribute("colspan") || "1", 10);
     });
   });
+});
+</script>
+<script>
+// Audit: rozbalení detailu záznamu kliknutím na řádek nebo tlačítko.
+document.addEventListener("click", function (e) {
+  var row = e.target.closest("tr.audit-row");
+  if (!row || e.target.closest("a")) return;
+  var detail = row.nextElementSibling, btn = row.querySelector(".audit-toggle");
+  if (!detail || !detail.classList.contains("audit-detail")) return;
+  var open = detail.hasAttribute("hidden");
+  detail.toggleAttribute("hidden", !open);
+  row.classList.toggle("open", open);
+  if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
 });
 </script>
 {% block scripts %}{% endblock %}
