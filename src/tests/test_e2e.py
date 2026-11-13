@@ -53,7 +53,8 @@ def test_invoice_lifecycle_in_browser(browser_for, make_user, make_profile, make
     total = page.get_by_test_id("total")
     total.wait_for()
     page.wait_for_function(
-        "document.querySelector('[data-testid=total]').innerText.replace(/\\s/g, ' ').includes('3 056,00')"
+        "(() => { const e = document.querySelector('[data-testid=total]');"
+        " return !!e && e.innerText.replace(/\\s/g, ' ').includes('3 056,00'); })()"
     )
     assert "3 056,00" in total.inner_text().replace("\xa0", " ")
 
